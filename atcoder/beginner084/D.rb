@@ -1,5 +1,5 @@
 def s()
-  gets().chomp
+  gets()
 end
 def i()
   gets.to_i
@@ -29,3 +29,36 @@ def eratosthenes(size)
   }
   [prime_list, is_prime]
 end
+
+
+sum = [0]
+
+pl, is_p =  eratosthenes(100003)
+
+like2017 = []
+pl[1..-1].each{|i|
+  if is_p[(i+1)/2]
+    like2017 << i
+  end
+}
+
+j=0
+100003.times{|i|
+  if like2017[j] == i
+    sum << sum[i]+1
+    j += 1
+  else
+    sum << sum[i]
+  end
+}
+sum = sum[1..-1]
+
+q = i()
+lr = []
+q.times{
+  lr << li()
+}
+
+lr.each{|l, r|
+  puts sum[r+1] - sum[l-1]
+}
