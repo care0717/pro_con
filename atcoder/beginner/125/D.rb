@@ -82,3 +82,28 @@ def get_bits(len)
   }
   res
 end
+
+def get_GCD(m, n)
+  tmp = [n, m].max
+  n = [n, m].min
+  m = tmp
+  while n != 0
+    tmp = m % n
+    m = n
+    n = tmp
+  end
+  m
+end
+
+n = i()
+an = li()
+minus_num = an.count {|item| item < 0 }
+
+res = if minus_num %2 == 0
+  an.map{|a| a.abs}.sum
+else
+  bn = an.map{|a| a.abs}
+  bn.sum - (bn.min*2)
+end
+
+p res
