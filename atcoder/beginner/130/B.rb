@@ -103,6 +103,20 @@ def get_GCD(m, n)
   m
 end
 
-def matrix(n, m=n, init=0)
-  Array.new(n).map{Array.new(m,init)}
+n, x = li()
+ls = li()
+sum = 0
+count = 1
+ls.each { |l|
+  sum += l
+
+  if sum > x
+    break
+  end
+  count  += 1
+}
+if n+1 <= count
+  puts n+1
+else
+  puts count
 end

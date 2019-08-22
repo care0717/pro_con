@@ -103,6 +103,10 @@ def get_GCD(m, n)
   m
 end
 
-def matrix(n, m=n, init=0)
-  Array.new(n).map{Array.new(m,init)}
+w, h, x, y = li()
+
+if w%2 == 0 && w/2 == x && h %2 == 0 && h/2 == y
+  puts [w*h/2.to_f, 1].join(" ")
+else
+  puts [w*h/2.to_f, 0].join(" ")
 end

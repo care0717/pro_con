@@ -12,14 +12,6 @@ def ili()
   as = gets.split.map(&:to_i)
   [n, as]
 end
-def inli()
-  n = gets.to_i
-  as = []
-  n.times {
-    as << gets.split.map(&:to_i)
-  }
-  [n, as]
-end
 class Array
   def sum
     total = 0
@@ -103,6 +95,49 @@ def get_GCD(m, n)
   m
 end
 
-def matrix(n, m=n, init=0)
-  Array.new(n).map{Array.new(m,init)}
+
+n = i()
+an = li()
+minus = an.select {|item| item  <  0 }
+plus = an.select {|item| item  >=  0 }
+res = []
+if minus.length == 0
+  min, index = plus.each_with_index.min
+  plus.delete_at(index)
+  base = plus.pop
+  plus.each { |a|
+    res.push(min.to_s+" "+a.to_s)
+    min -= a
+  }
+  res.push(base.to_s+" "+min.to_s)
+  p base - min
+elsif plus.length == 0
+  max, index = minus.each_with_index.max
+  minus.delete_at(index)
+  base = minus.pop
+  res = []
+  minus.each { |a|
+    res.push(max.to_s+" "+a.to_s)
+    max -= a
+  }
+  res.push(max.to_s+" "+base.to_s)
+  p  max - base
+else
+  minus_base = minus.pop
+  plus_base = plus.pop
+  plus.each { |a|
+    res.push(minus_base.to_s + " " + a.to_s)
+    minus_base -= a
+  }
+  minus.push(minus_base)
+  minus.each { |a|
+
+    res.push(plus_base.to_s + " " + a.to_s)
+    plus_base -= a
+  }
+  puts plus_base
 end
+
+res.each { |r|
+  puts r
+}
