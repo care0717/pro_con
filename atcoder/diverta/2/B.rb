@@ -103,6 +103,22 @@ def get_GCD(m, n)
   m
 end
 
-def matrix(n, m=n, init=0)
-  Array.new(n).map{Array.new(m,init)}
+def solve(n, as)
+  map = {}
+  if as.length == 1
+    return 1
+  end
+  0.upto(n-2) { |i|
+    (i+1).upto(n-1) {|j|
+      key = (as[i][0]-as[j][0]).abs.to_s + " " + (as[i][1] - as[j][1]).abs.to_s
+      if map.has_key?(key)
+        map[key] += 1
+      else
+        map[key] = 1
+      end
+    }
+  }
+  return n-map.max{ |x, y| x[1] <=> y[1] }[1]
 end
+n, as = inli()
+puts solve(n, as)

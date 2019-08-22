@@ -103,6 +103,29 @@ def get_GCD(m, n)
   m
 end
 
-def matrix(n, m=n, init=0)
-  Array.new(n).map{Array.new(m,init)}
+n, k = li()
+as = li()
+
+is = 0
+ie = 1
+
+sum_as  = [0]
+0.upto(n-1) { |i|
+  sum_as << sum_as[i] + as[i]
+}
+counter = 0
+while is <= n-1
+  diff = sum_as[ie] - sum_as[is]
+  if diff >= k
+    counter += n-ie+1
+    is += 1
+  else
+    if ie < n
+      ie += 1
+    else
+      break
+    end
+  end
 end
+
+puts counter

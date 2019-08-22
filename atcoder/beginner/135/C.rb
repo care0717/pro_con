@@ -103,6 +103,20 @@ def get_GCD(m, n)
   m
 end
 
-def matrix(n, m=n, init=0)
-  Array.new(n).map{Array.new(m,init)}
-end
+
+n = i()
+as =li()
+bs = li()
+sum = 0
+n.times {|i|
+  if as[i] >= bs[i]
+    sum += bs[i]
+  elsif bs[i]-as[i] > as[i+1]
+    sum += as[i] + as[i+1]
+    as[i+1] = 0
+  else
+    sum += bs[i]
+    as[i+1] -= (bs[i]-as[i])
+  end
+}
+p sum

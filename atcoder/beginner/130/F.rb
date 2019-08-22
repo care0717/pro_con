@@ -102,7 +102,3 @@ def get_GCD(m, n)
   end
   m
 end
-
-def matrix(n, m=n, init=0)
-  Array.new(n).map{Array.new(m,init)}
-end

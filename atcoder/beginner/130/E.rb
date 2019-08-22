@@ -103,6 +103,38 @@ def get_GCD(m, n)
   m
 end
 
-def matrix(n, m=n, init=0)
-  Array.new(n).map{Array.new(m,init)}
+n, m = li()
+sn = li()
+tn = li()
+
+list = []
+n.times{ |i|
+  list << []
+  m.times{  |j|
+    if sn[i] == tn[j]
+      list[i] << j
+    end
+  }
+}
+
+dp = Array.new(n).map{Array.new(m,0)}
+if !list[n-1].empty?
+  list[n-1].each { |l|
+    0.upto(l) { |i|
+      dp[n-1][i] += 1
+    }
+  }
 end
+p list
+
+(n-2).downto(0) { |i|
+  0.upto(m-1) { |k|
+    list[i].select{|l| l >= k}.each{ |index|
+      index.upto(m-1) { |index2|
+        dp[i][k] += dp[i+1][index2]
+      }
+    }
+  }
+}
+
+p dp

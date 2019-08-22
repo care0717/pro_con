@@ -102,7 +102,41 @@ def get_GCD(m, n)
   end
   m
 end
-
 def matrix(n, m=n, init=0)
   Array.new(n).map{Array.new(m,init)}
 end
+
+S = s().reverse
+M = 10**9+7
+mod = 13
+dp = matrix(S.size, mod)
+if S[0] == "?"
+  10.times{|i|
+    dp[0][i] = 1
+  }
+else
+  num = S[0].to_i
+  dp[0][num] = 1
+end
+index = 1
+S[1..-1].each_char {|ch|
+  if ch == "?"
+    10.times{|j|
+      num = (j.to_i * (10**index))%13
+      dp[index-1].each_with_index {|pat, i|
+        dp[index][(num+i)%13] += pat
+      }
+    }
+  else
+    num = (ch.to_i * (10**index))%13
+    dp[index-1].each_with_index {|pat, i|
+      dp[index][(num+i)%13] += pat
+    }
+  end
+  mod.times{|i|
+    dp[index][i] = dp[index][i]%M
+  }
+  index += 1
+
+}
+p dp[index-1][5]
