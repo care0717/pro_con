@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
-	"fmt"
 )
 
 var sc = bufio.NewScanner(os.Stdin)
@@ -59,6 +59,45 @@ func matrix(n, m int) [][]int {
 }
 
 func main() {
-	S := read()
-	
+	S := strings.Split(read(), "")
+	M := 1000000007
+	mod := 13
+	dp := matrix(len(S), mod)
+	if S[0] == "?" {
+		for i := 0; i< 10; i++ {
+			dp[0][i] = 1
+		}
+	} else {
+		num, _ := strconv.Atoi(S[0])
+		dp[0][num] = 1
+	}
+	index := 1
+	l := len(S)
+	for _, ch := range S[1:l] {
+		if ch == "?" {
+			for j := 0; j< 10; j++ {
+				num := j
+				for k := 0; k < index; k++ {
+					num = (num * 10) % 13
+				}
+				fmt.Println(num)
+				for k, pat := range dp[index-1] {
+					dp[index][(num+k)%13] += pat
+				}
+			}
+		} else {
+			num, _ :=  strconv.Atoi(ch)
+			for k := 0; k < index; k++ {
+				num = (num * 10) % 13
+			}
+			for k, pat := range dp[index-1] {
+				dp[index][(num+k)%13] += pat
+			}
+		}
+		for i := 0; i< mod; i++{
+			dp[index][i] = dp[index][i]%M
+		}
+		index += 1
+	}
+	fmt.Println(dp[index-1][5])
 }
