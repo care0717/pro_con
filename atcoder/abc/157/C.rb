@@ -1,5 +1,3 @@
-require 'set'
-
 def s()
   gets().chomp
 end
@@ -120,39 +118,31 @@ end
 def matrix(n, m=n, init=0)
   Array.new(n).map{Array.new(m,init)}
 end
-class UnionFind
-  def initialize(size)
-    @par = (0..size).to_a
-    @size = Array.new(size+1, 1)
-  end
-  def root(x)
-    while @par[x] != x
-      @par[x] = @par[@par[x]]
-      x = @par[x]
-    end
-    x
-  end
-  def merge(a, b)
-    a = root(a)
-    b = root(b)
-    if a == b
-      return false
-    end
-    if @size[a] < @size[b]
-      tmp = a
-      a = b
-      b = tmp
-    end
-    @size[a] += @size[b]
-    @par[b] = a
-    true
-  end
 
-  def is_same(a, b)
-    root(a) == root(b)
+def solve(n, ss)
+  map = {}
+  ss.each do |s,c|
+    if map.has_key?(s) && map[s] != c
+      return -1
+    end
+    map[s] = c
   end
-
-  def size(a)
-    @size[root(a)]
+  if map[1] == 0 && n > 1
+    return -1
   end
+  res = Array.new(n, 0)
+  if n > 1
+    res[0] = 1
+  end
+  map.each do |k, v|
+    res[k-1] = v
+  end
+  res.join("")
 end
+
+N, M = li()
+ss = []
+M.times do
+  ss << li()
+end
+puts solve(N, ss)
