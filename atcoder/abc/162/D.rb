@@ -156,3 +156,37 @@ class UnionFind
     @size[root(a)]
   end
 end
+
+n = i()
+S = s()
+map = {}
+colors = ['R', 'G', 'B']
+colors.each do |c|
+  map[c] = 0
+end
+
+S.each_char.with_index do |c,i|
+  map[c] += 1
+end
+
+counter = 0
+(1..(n/2)).each do |distance|
+
+  (0..(n-2*distance)).each do |i|
+    if i+2*distance > n-1
+      next
+    end
+
+    if S[i] != S[i+distance] && S[i+distance] != S[i+2*distance] && S[i+2*distance] != S[i]
+      counter +=1
+    end
+  end
+end
+
+sum = 1
+colors.each do |c|
+  sum *= map[c]
+end
+puts sum - counter
+
+
