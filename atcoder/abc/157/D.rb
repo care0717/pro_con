@@ -156,3 +156,49 @@ class UnionFind
     @size[root(a)]
   end
 end
+
+
+n, m, k = li()
+fs = []
+m.times do
+  fs << li()
+end
+bs = []
+k.times do
+  bs << li()
+end
+
+uf = UnionFind.new(n)
+map = {}
+fs.each do |a,b|
+  if map.has_key?(a)
+    map[a] << b
+  else
+    map[a] = Set.new([b])
+  end
+  if map.has_key?(b)
+    map[b] << a
+  else
+    map[b] = Set.new([a])
+  end
+  uf.merge(a, b)
+end
+
+bs.each do |a,b|
+  if map.has_key?(a)
+    map[a] << b
+  else
+    map[a] = Set.new([b])
+  end
+  if map.has_key?(b)
+    map[b] << a
+  else
+    map[b] = Set.new([a])
+  end
+end
+res = []
+1.upto(n) do |i|
+  tmp = uf.size(i) - map.fetch(i, Set.new()).count{|j| uf.is_same(i, j)} - 1
+  res << tmp
+end
+puts res.join(" ")
