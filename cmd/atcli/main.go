@@ -76,12 +76,19 @@ func test(contestName, problemName string) error {
 	}
 	for i, s := range samples {
 		cmd := exec.Command("go", "run", path.Join(c.DirName(), subdir, fmt.Sprintf("%s.go", problemName)))
-		stdin, _ := cmd.StdinPipe()
-		if _, err := io.WriteString(stdin, s.Input); err != nil {
-			return nil
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			return err
 		}
-		stdin.Close()
-		out, _ := cmd.Output()
+		go func() {
+			defer stdin.Close()
+			io.WriteString(stdin, s.Input)
+		}()
+
+		out, err := cmd.Output()
+		if err != nil {
+			return err
+		}
 		actual := strings.TrimRight(string(out), "\n")
 		if actual == s.Output {
 			fmt.Printf("case %d OK\n", i)
