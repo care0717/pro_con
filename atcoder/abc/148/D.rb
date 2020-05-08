@@ -12,6 +12,14 @@ def ili()
   as = gets.split.map(&:to_i)
   [n, as]
 end
+def inli()
+  n = gets.to_i
+  as = []
+  n.times {
+    as << gets.split.map(&:to_i)
+  }
+  [n, as]
+end
 class Array
   def sum
     total = 0
@@ -83,36 +91,45 @@ def get_bits(len)
   res
 end
 
-n, m, q = li()
-ruiseki = Array.new(501, 0)
-501.times{|i|
-  ruiseki[i] = Array.new(501, 0)
+def get_GCD(m, n)
+  tmp = [n, m].max
+  n = [n, m].min
+  m = tmp
+  while n != 0
+    tmp = m % n
+    m = n
+    n = tmp
+  end
+  m
+end
 
-}
 
+n = i()
+as =li()
+i = 1
+count = 0
+as.each {|a|
+    if a == i
+            count += 1
+            i += 1
+    end
+}
+if count == 0
+    j = 1
+    flag = false
+    as.each {|a|
+        if a != j
+            flag = true
+        end
+        j += 1
+    }
+    if flag
+    puts -1
+    else
+    puts 0
+    end
+else
+  puts as.size - count
+end
 
-lrs = []
-m.times{
-  temp = li()
-  lrs << temp
-  ruiseki[temp[0]][temp[1]] += 1
-}
-
-501.times{|i|
-  500.times{|j|
-    ruiseki[500-j-1][i] += ruiseki[500-j][i]
-  }
-}
-501.times{|i|
-  500.times{|j|
-    ruiseki[i][j+1] += ruiseki[i][j]
-  }
-}
-qs = []
-q.times{
-  qs << li()
-}
-qs.each{|l, r|
-  puts ruiseki[l][r]
-}
 

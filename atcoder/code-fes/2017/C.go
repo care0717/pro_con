@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"math"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"fmt"
@@ -50,15 +52,54 @@ func transpose(a [][]int) {
 	}
 }
 
-func matrix(n, m int) [][]int {
-	mat := make([][]int, n)
-	for i:=0; i<n; i++{
-		mat[i] = make([]int, m)
+func min(nums ...int) int {
+	if len(nums) == 0 {
+		panic("funciton min() requires at least one argument.")
 	}
-	return mat
+	res := nums[0]
+	for i := 0; i < len(nums); i++ {
+		res = int(math.Min(float64(res), float64(nums[i])))
+	}
+	return res
 }
 
 func main() {
-	S := read()
-	
+	n := geti()
+	ds := getli(n)
+	fmt.Println(solve(ds))
+}
+
+func solve(ds []int) int {
+	if len(ds) == 1 {
+		return ds[0]
+	}
+	var res [25]bool
+	res[0] = true
+	res[24] = true
+
+	sort.Ints(ds)
+
+	for i, d := range ds {
+		if i % 2 == 0 {
+			if res[d] {
+				return 0
+			}
+			res[d] = true
+		} else {
+			if res[24-d] {
+				return 0
+			}
+			res[24-d] = true
+		}
+	}
+	minnum := 100000
+	counter := 1000000
+	for _, b := range res {
+		if b {
+			minnum = min(counter, minnum)
+			counter = 0
+		}
+		counter += 1
+	}
+	return minnum
 }

@@ -12,6 +12,14 @@ def ili()
   as = gets.split.map(&:to_i)
   [n, as]
 end
+def inli()
+  n = gets.to_i
+  as = []
+  n.times {
+    as << gets.split.map(&:to_i)
+  }
+  [n, as]
+end
 class Array
   def sum
     total = 0
@@ -83,20 +91,45 @@ def get_bits(len)
   res
 end
 
-tyo = 5000000000000000
-
-s = s()
-k = i()
-len = 0
-s.each_char{|x|
-  if x=="1"
-    len += 1
-  else
-    break
+def get_GCD(m, n)
+  tmp = [n, m].max
+  n = [n, m].min
+  m = tmp
+  while n != 0
+    tmp = m % n
+    m = n
+    n = tmp
   end
-}
-if k <= len
-  puts 1
-else
-  puts s[len]
+  m
 end
+
+def insu(n, a)
+  count = 0
+  waru = a
+  while n/waru != 0
+    count += if a == 5
+               n/waru/2
+             else
+               n/waru
+             end
+    waru *= a
+  end
+
+  return count
+end
+
+n = i()
+
+def solve(n)
+  if n % 2 == 1
+    return 0
+  end
+  count2 = insu(n, 2)
+  count5 = insu(n, 5)
+  return [count5, count2].min
+end
+
+puts solve(n)
+
+
+

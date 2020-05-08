@@ -4,12 +4,23 @@ end
 def i()
   gets.to_i
 end
+def ls()
+  gets.split
+end
 def li()
   gets.split.map(&:to_i)
 end
 def ili()
   n = gets.to_i
   as = gets.split.map(&:to_i)
+  [n, as]
+end
+def inli()
+  n = gets.to_i
+  as = []
+  n.times {
+    as << gets.split.map(&:to_i)
+  }
   [n, as]
 end
 class Array
@@ -82,5 +93,56 @@ def get_bits(len)
   }
   res
 end
-a, b = li()
-puts (a-1)*(b-1)
+
+def get_GCD(m, n)
+  tmp = [n, m].max
+  n = [n, m].min
+  m = tmp
+  while n != 0
+    tmp = m % n
+    m = n
+    n = tmp
+  end
+  m
+end
+def fact(n, m=0)
+  (m+1..n).inject(1,:*)
+end
+def perm(n, r)
+  fact(n, n-r)
+end
+def comb(n, m)
+  fact(n, n-m)/fact(m)
+end
+
+def matrix(n, m=n, init=0)
+  Array.new(n).map{Array.new(m,init)}
+end
+
+def solve(n, ss)
+  map = {}
+  ss.each do |s,c|
+    if map.has_key?(s) && map[s] != c
+      return -1
+    end
+    map[s] = c
+  end
+  if map[1] == 0 && n > 1
+    return -1
+  end
+  res = Array.new(n, 0)
+  if n > 1
+    res[0] = 1
+  end
+  map.each do |k, v|
+    res[k-1] = v
+  end
+  res.join("")
+end
+
+N, M = li()
+ss = []
+M.times do
+  ss << li()
+end
+puts solve(N, ss)
