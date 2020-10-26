@@ -30,13 +30,9 @@ func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
 	}
 }
 
-func readInt64() int64 {
-	n, _ := strconv.ParseInt(ReadString(), 10, 64)
-	return n
-}
-
 func readInt() int {
-	return int(readInt64())
+	n, _ := strconv.Atoi(ReadString())
+	return n
 }
 
 // 10 11 12 => [10, 11, 12]
@@ -121,6 +117,63 @@ func max(integers ...int) int {
 		}
 	}
 	return m
+}
+
+type SegmentTree interface {
+	Get(start, end int) int
+	Update(x, val int)
+	Add(x, val int)
+}
+
+type SumSegmentTree struct {
+	node []int
+	n    int
+}
+
+func (s SumSegmentTree) Get(start, end int) int {
+	return s.sum(start, end, 0, 0, s.n)
+}
+
+func (s SumSegmentTree) sum(start, end, k, l, r int) int {
+	if r <= start || end <= l {
+		return 0
+	}
+	if start <= l && r <= end {
+		return s.node[k]
+	}
+	return s.sum(start, end, 2*k+1, l, (l+r)/2) + s.sum(start, end, 2*k+2, (l+r)/2, r)
+}
+
+func (s *SumSegmentTree) Update(x, val int) {
+	x += s.n - 1
+	s.node[x] = val
+	s.rebuild(x)
+}
+func (s *SumSegmentTree) Add(x, val int) {
+	x += s.n - 1
+	s.node[x] += val
+	s.rebuild(x)
+}
+func (s *SumSegmentTree) rebuild(x int) {
+	for x > 0 {
+		x = (x - 1) / 2
+		s.node[x] = s.node[2*x+1] + s.node[2*x+2]
+	}
+}
+func NewSumSegmentTree(list []int) SegmentTree {
+	l := len(list)
+	n := 1
+	for n < l {
+		n *= 2
+	}
+	node := make([]int, 2*n-1)
+	for i, n := range list {
+		node[i+n-1] = n
+	}
+	for i := n - 2; i >= 0; i-- {
+		node[i] = node[2*i+1] + node[2*i+2]
+	}
+	return &SumSegmentTree{node: node, n: n}
 }
 
 func main() {

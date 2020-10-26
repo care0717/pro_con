@@ -124,5 +124,11 @@ func max(integers ...int) int {
 }
 
 func main() {
-
+	n := readInt()
+	var sum int64
+	for i := 1; i <= n; i++ {
+		m := n / i
+		sum += int64(i * m * (m + 1) / 2)
+	}
+	fmt.Println(sum)
 }
