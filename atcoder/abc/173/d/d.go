@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 )
 
@@ -30,13 +31,9 @@ func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
 	}
 }
 
-func readInt64() int64 {
-	n, _ := strconv.ParseInt(ReadString(), 10, 64)
-	return n
-}
-
 func readInt() int {
-	return int(readInt64())
+	n, _ := strconv.Atoi(ReadString())
+	return n
 }
 
 // 10 11 12 => [10, 11, 12]
@@ -124,5 +121,21 @@ func max(integers ...int) int {
 }
 
 func main() {
-
+	n := readInt()
+	as := readIntSlice(n)
+	sort.Ints(as)
+	tmp := make([]int, n)
+	for i := 0; i < n; i++ {
+		tmp[i] = as[n-1-i]
+	}
+	as = tmp
+	var sum int
+	for i := 1; i < n; i++ {
+		if i == 1 {
+			sum += as[0]
+			continue
+		}
+		sum += as[i/2]
+	}
+	fmt.Println(sum)
 }

@@ -1,0 +1,26 @@
+[
+ {
+  "input": "RRS",
+  "output": "2"
+ },
+ {
+  "input": "SSS",
+  "output": "0"
+ },
+ {
+  "input": "RSR",
+  "output": "1"
+ },
+ {
+  "input": "RRR",
+  "output": "3"
+ },
+ {
+  "input": "SRR",
+  "output": "2"
+ },
+ {
+  "input": "SRS",
+  "output": "1"
+ }
+]

@@ -1,0 +1,14 @@
+[
+ {
+  "input": "4\nWWRR",
+  "output": "2"
+ },
+ {
+  "input": "2\nRR",
+  "output": "0"
+ },
+ {
+  "input": "8\nWRWWRWRR",
+  "output": "3"
+ }
+]

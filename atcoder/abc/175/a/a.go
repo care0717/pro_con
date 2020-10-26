@@ -30,13 +30,9 @@ func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
 	}
 }
 
-func readInt64() int64 {
-	n, _ := strconv.ParseInt(ReadString(), 10, 64)
-	return n
-}
-
 func readInt() int {
-	return int(readInt64())
+	n, _ := strconv.Atoi(ReadString())
+	return n
 }
 
 // 10 11 12 => [10, 11, 12]
@@ -124,5 +120,19 @@ func max(integers ...int) int {
 }
 
 func main() {
+	S := ReadString()
+	var count int
+	var max int
+	for _, c := range S {
+		if c == 'R' {
+			count++
+		} else if c == 'S' {
+			count = 0
+		}
+		if max < count {
+			max = count
+		}
 
+	}
+	fmt.Println(max)
 }

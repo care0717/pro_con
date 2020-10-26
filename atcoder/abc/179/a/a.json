@@ -1,0 +1,14 @@
+[
+ {
+  "input": "apple",
+  "output": "apples"
+ },
+ {
+  "input": "bus",
+  "output": "buses"
+ },
+ {
+  "input": "box",
+  "output": "boxs"
+ }
+]

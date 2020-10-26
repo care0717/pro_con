@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/care0717/pro_con/cmd/atcli/model"
+	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -13,6 +15,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"net/http"
 	"net/http/cookiejar"
@@ -74,8 +77,16 @@ func test(contestName, problemName string) error {
 	if err := json.Unmarshal(bytes, &samples); err != nil {
 		return err
 	}
+	targetFilePath := path.Join(c.DirName(), subdir, fmt.Sprintf("%s.go", problemName))
+	execPath := path.Join("/tmp", problemName)
+	if err := exec.Command("go", "build", "-o", execPath, targetFilePath).Run(); err != nil {
+		return errors.Wrap(err, "failed go build")
+	}
+	defer os.Remove(execPath)
 	for i, s := range samples {
-		cmd := exec.Command("go", "run", path.Join(c.DirName(), subdir, fmt.Sprintf("%s.go", problemName)))
+		timeoutLimit := 2 * time.Second
+		ctx, cancel := context.WithTimeout(context.Background(), timeoutLimit)
+		cmd := exec.CommandContext(ctx, execPath)
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			return err
@@ -84,17 +95,22 @@ func test(contestName, problemName string) error {
 			defer stdin.Close()
 			io.WriteString(stdin, s.Input)
 		}()
-
 		out, err := cmd.Output()
 		if err != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				err = errors.Wrap(err, fmt.Sprintf("In case %d, context deadline exceeded (over %s)", i, timeoutLimit.String()))
+			} else if ctx.Err() != nil {
+				err = errors.Wrap(err, ctx.Err().Error())
+			}
 			return err
 		}
 		actual := strings.TrimRight(string(out), "\n")
 		if actual == s.Output {
 			fmt.Printf("case %d OK\n", i)
 		} else {
-			fmt.Printf("expect %s, but got %s\n", s.Output, actual)
+			fmt.Printf("case %d NG. expect %s, but got %s\n", i, s.Output, actual)
 		}
+		cancel()
 	}
 	return nil
 }

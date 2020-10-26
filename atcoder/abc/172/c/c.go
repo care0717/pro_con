@@ -124,5 +124,51 @@ func max(integers ...int) int {
 }
 
 func main() {
-
+	n, m, k := readInt(), readInt(), readInt()
+	as := readIntSlice(n)
+	bs := readIntSlice(m)
+	var maxASum int
+	var maxAIndex = -1
+	var readACount int
+	for i, a := range as {
+		if maxASum+a <= k {
+			maxASum += a
+			maxAIndex = i
+			readACount++
+		} else {
+			break
+		}
+	}
+	rest := k - maxASum
+	var maxBSum int
+	var maxBIndex = -1
+	var readBCount int
+	for i, b := range bs {
+		if maxBSum+b <= rest {
+			maxBSum += b
+			maxBIndex = i
+			readBCount++
+		} else {
+			break
+		}
+	}
+	rest = rest - maxBSum
+	cur := readACount + readBCount
+	result := cur
+	aIndex := maxAIndex
+	bIndex := maxBIndex
+	for aIndex >= 0 && bIndex < m-1 {
+		rest += as[aIndex]
+		aIndex--
+		cur--
+		for bIndex < m-1 && rest >= bs[bIndex+1] {
+			rest -= bs[bIndex+1]
+			cur++
+			bIndex++
+		}
+		if result < cur {
+			result = cur
+		}
+	}
+	fmt.Println(result)
 }

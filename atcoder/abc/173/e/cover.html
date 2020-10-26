@@ -1,0 +1,367 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/care0717/pro_con/atcoder/abc/173/e/e.go (73.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package e
+
+import (
+        "bufio"
+        "fmt"
+        "io"
+        "os"
+        "sort"
+        "strconv"
+)
+
+var (
+        // ReadString returns a WORD string.
+        ReadString func() string
+)
+
+func init() <span class="cov8" title="1">{
+        ReadString = newReadString(os.Stdin, bufio.ScanWords)
+}</span>
+
+func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string <span class="cov8" title="1">{
+        r := bufio.NewScanner(ior)
+        r.Buffer(make([]byte, 1024), int(1e+9)) // for Codeforces
+        r.Split(sf)
+
+        return func() string </span><span class="cov0" title="0">{
+                if !r.Scan() </span><span class="cov0" title="0">{
+                        panic("Scan failed")</span>
+                }
+                <span class="cov0" title="0">return r.Text()</span>
+        }
+}
+
+func readInt() int <span class="cov0" title="0">{
+        n, _ := strconv.Atoi(ReadString())
+        return n
+}</span>
+
+// 10 11 12 =&gt; [10, 11, 12]
+func readIntSlice(size int) []int <span class="cov0" title="0">{
+        a := make([]int, size)
+        for i := 0; i &lt; size; i++ </span><span class="cov0" title="0">{
+                a[i] = readInt()
+        }</span>
+        <span class="cov0" title="0">return a</span>
+}
+
+func get2byte(size int) [][]byte <span class="cov0" title="0">{
+        a := make([][]byte, size)
+        for i := 0; i &lt; size; i++ </span><span class="cov0" title="0">{
+                var low string
+                fmt.Scan(&amp;low)
+                a[i] = []byte(low)
+        }</span>
+        <span class="cov0" title="0">return a</span>
+}
+
+func transpose(a [][]int) <span class="cov0" title="0">{
+        n := len(a)
+        for i := 0; i &lt; n; i++ </span><span class="cov0" title="0">{
+                for j := i + 1; j &lt; n; j++ </span><span class="cov0" title="0">{
+                        a[i][j], a[j][i] = a[j][i], a[i][j]
+                }</span>
+        }
+}
+
+func fact(n, m int) int <span class="cov0" title="0">{
+        res := 1
+        for i := m + 1; i &lt;= n; i++ </span><span class="cov0" title="0">{
+                res *= i
+        }</span>
+        <span class="cov0" title="0">return res</span>
+}
+
+func perm(n, r int) int <span class="cov0" title="0">{
+        if r &gt; n </span><span class="cov0" title="0">{
+                return 0
+        }</span>
+        <span class="cov0" title="0">return fact(n, n-r)</span>
+}
+
+func comb(n, m int) int <span class="cov0" title="0">{
+        if m &gt; n </span><span class="cov0" title="0">{
+                return 0
+        }</span>
+        <span class="cov0" title="0">return fact(n, n-m) / fact(m, 0)</span>
+}
+
+func reverse(s string) string <span class="cov0" title="0">{
+        runes := []rune(s)
+        for i, j := 0, len(runes)-1; i &lt; j; i, j = i+1, j-1 </span><span class="cov0" title="0">{
+                runes[i], runes[j] = runes[j], runes[i]
+        }</span>
+        <span class="cov0" title="0">return string(runes)</span>
+}
+
+func min(integers ...int) int <span class="cov8" title="1">{
+        m := integers[0]
+        for i, integer := range integers </span><span class="cov8" title="1">{
+                if i == 0 </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">if m &gt; integer </span><span class="cov8" title="1">{
+                        m = integer
+                }</span>
+        }
+        <span class="cov8" title="1">return m</span>
+}
+
+func max(integers ...int) int <span class="cov8" title="1">{
+        m := integers[0]
+        for i, integer := range integers </span><span class="cov8" title="1">{
+                if i == 0 </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">if m &lt; integer </span><span class="cov0" title="0">{
+                        m = integer
+                }</span>
+        }
+        <span class="cov8" title="1">return m</span>
+}
+
+func reverseInts(list []int) []int <span class="cov8" title="1">{
+        n := len(list)
+        tmp := make([]int, n)
+        for i, l := range list </span><span class="cov8" title="1">{
+                tmp[n-1-i] = l
+        }</span>
+        <span class="cov8" title="1">return tmp</span>
+}
+
+const mod = 1000000007
+
+func main() <span class="cov0" title="0">{
+        n, k := readInt(), readInt()
+        as := readIntSlice(n)
+        res := Solve(n, k, as)
+        if res &lt; 0 </span><span class="cov0" title="0">{
+                res = mod + res
+        }</span>
+        <span class="cov0" title="0">fmt.Println(res)</span>
+}
+
+func multi(a, b int) int <span class="cov8" title="1">{
+        res := (a * b) % mod
+        return res
+}</span>
+func Solve(n, k int, as []int) int <span class="cov8" title="1">{
+        sort.Ints(as)
+        as = reverseInts(as)
+        if n == k </span><span class="cov8" title="1">{
+                res := 1
+                for _, a := range as </span><span class="cov8" title="1">{
+                        res = multi(res, a)
+                }</span>
+                <span class="cov8" title="1">return res</span>
+        }
+        <span class="cov8" title="1">maxAs := max(as...)
+        if maxAs &lt;= 0 </span><span class="cov8" title="1">{
+                tmp := as
+                if k%2 == 0 </span><span class="cov8" title="1">{
+                        tmp = reverseInts(as)
+                }</span>
+                <span class="cov8" title="1">res := 1
+                for i := 0; i &lt; k; i++ </span><span class="cov8" title="1">{
+                        res = multi(res, tmp[i])
+                }</span>
+                <span class="cov8" title="1">return res</span>
+        }
+        <span class="cov8" title="1">if min(as...) &gt;= 0 </span><span class="cov8" title="1">{
+                res := 1
+                for i := 0; i &lt; k; i++ </span><span class="cov8" title="1">{
+                        res = multi(res, as[i])
+                }</span>
+                <span class="cov8" title="1">return res</span>
+        }
+
+        <span class="cov8" title="1">var negativePart, positivePart []int
+        for _, a := range as </span><span class="cov8" title="1">{
+                if a &gt;= 0 </span><span class="cov8" title="1">{
+                        positivePart = append(positivePart, a)
+                }</span> else<span class="cov8" title="1"> {
+                        negativePart = append(negativePart, a)
+                }</span>
+        }
+        <span class="cov8" title="1">negativePart = reverseInts(negativePart)
+        var results []int
+        for i := 0; i &lt; k; i++ </span><span class="cov8" title="1">{
+                if len(positivePart) == 0 </span><span class="cov8" title="1">{
+                        results = append(results, negativePart[0])
+                        negativePart = negativePart[1:]
+                }</span> else<span class="cov8" title="1"> if len(negativePart) == 0 </span><span class="cov8" title="1">{
+                        results = append(results, positivePart[0])
+                        positivePart = positivePart[1:]
+                }</span> else<span class="cov8" title="1"> if positivePart[0] &gt; -negativePart[0] </span><span class="cov8" title="1">{
+                        results = append(results, positivePart[0])
+                        positivePart = positivePart[1:]
+                }</span> else<span class="cov8" title="1"> if positivePart[0] &lt;= -negativePart[0] </span><span class="cov8" title="1">{
+                        results = append(results, negativePart[0])
+                        negativePart = negativePart[1:]
+                }</span>
+        }
+        <span class="cov8" title="1">if isNegative(results) </span><span class="cov8" title="1">{
+                if len(negativePart) &gt; 0 &amp;&amp; len(positivePart) &gt; 0 </span><span class="cov8" title="1">{
+                        tmp1 := make([]int, k)
+                        tmp2 := make([]int, k)
+                        copy(tmp1, results)
+                        copy(tmp2, results)
+                        for i := k - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                                if tmp1[i] &gt; 0 </span><span class="cov8" title="1">{
+                                        tmp1[i] = negativePart[0]
+                                        break</span>
+                                }
+                        }
+                        <span class="cov8" title="1">res1 := 1
+                        for _, r := range tmp1 </span><span class="cov8" title="1">{
+                                res1 = multi(res1, r)
+                        }</span>
+                        <span class="cov8" title="1">for i := k - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                                if tmp2[i] &lt; 0 </span><span class="cov8" title="1">{
+                                        tmp2[i] = positivePart[0]
+                                        break</span>
+                                }
+                        }
+                        <span class="cov8" title="1">res2 := 1
+                        for _, r := range tmp2 </span><span class="cov8" title="1">{
+                                res2 = multi(res2, r)
+                        }</span>
+                        <span class="cov8" title="1">if res1 &gt; res2 </span><span class="cov8" title="1">{
+                                results = tmp1
+                        }</span> else<span class="cov8" title="1"> {
+                                results = tmp2
+                        }</span>
+                } else<span class="cov8" title="1"> if len(negativePart) &gt; 0 </span><span class="cov8" title="1">{
+                        for i := k - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                                if results[i] &gt; 0 </span><span class="cov8" title="1">{
+                                        results[i] = negativePart[0]
+                                        break</span>
+                                }
+                        }
+                } else<span class="cov8" title="1"> if len(positivePart) &gt; 0 </span><span class="cov8" title="1">{
+                        for i := k - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                                if results[i] &lt; 0 </span><span class="cov8" title="1">{
+                                        results[i] = positivePart[0]
+                                        break</span>
+                                }
+                        }
+                }
+        }
+        <span class="cov8" title="1">res := 1
+        for _, r := range results </span><span class="cov8" title="1">{
+                res = multi(res, r)
+        }</span>
+        <span class="cov8" title="1">return res</span>
+}
+
+func isNegative(as []int) bool <span class="cov8" title="1">{
+        var counter int
+        for _, a := range as </span><span class="cov8" title="1">{
+                if a &lt; 0 </span><span class="cov8" title="1">{
+                        counter++
+                }</span>
+        }
+        <span class="cov8" title="1">return counter%2 == 1</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

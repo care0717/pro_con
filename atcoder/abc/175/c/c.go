@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 )
@@ -110,6 +111,19 @@ func min(integers ...int) int {
 	return m
 }
 
+func min64(integers ...int64) int64 {
+	m := integers[0]
+	for i, integer := range integers {
+		if i == 0 {
+			continue
+		}
+		if m > integer {
+			m = integer
+		}
+	}
+	return m
+}
+
 func max(integers ...int) int {
 	m := integers[0]
 	for i, integer := range integers {
@@ -124,5 +138,40 @@ func max(integers ...int) int {
 }
 
 func main() {
+	x, k, d := readInt64(), readInt64(), readInt64()
+	fmt.Println(solve(x, k, d))
+}
 
+func solve(x, k, d int64) int64 {
+	np := (k - x/d) / 2
+	nm := (k + x/d) / 2
+	if np < 0 {
+		return int64(math.Abs(float64(x - k*d)))
+	} else if nm < 0 {
+		return int64(math.Abs(float64(x + k*d)))
+	}
+	var res []int64
+	for i := -1; i <= 1; i++ {
+		xp := np + int64(i)
+		if xp < 0 {
+			continue
+		}
+		xm := k - xp
+		if xm < 0 {
+			continue
+		}
+		res = append(res, int64(math.Abs(float64(x+(xp-xm)*d))))
+	}
+	for i := -1; i <= 1; i++ {
+		xm := nm + int64(i)
+		if xm < 0 {
+			continue
+		}
+		xp := k - xm
+		if xp < 0 {
+			continue
+		}
+		res = append(res, int64(math.Abs(float64(x+(xp-xm)*d))))
+	}
+	return min64(res...)
 }
