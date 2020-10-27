@@ -3,32 +3,48 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"math"
 	"os"
-	"sort"
 	"strconv"
-	"strings"
 )
 
-var sc = bufio.NewScanner(os.Stdin)
+var (
+	// ReadString returns a WORD string.
+	ReadString func() string
+)
 
-func read() string {
-	sc.Scan()
-	return sc.Text()
+func init() {
+	ReadString = newReadString(os.Stdin, bufio.ScanWords)
 }
 
-func geti() int {
-	n, _ := strconv.Atoi(read())
+func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
+	r := bufio.NewScanner(ior)
+	r.Buffer(make([]byte, 1024), int(1e+9)) // for Codeforces
+	r.Split(sf)
+
+	return func() string {
+		if !r.Scan() {
+			panic("Scan failed")
+		}
+		return r.Text()
+	}
+}
+
+func readInt64() int64 {
+	n, _ := strconv.ParseInt(ReadString(), 10, 64)
 	return n
 }
 
+func readInt() int {
+	return int(readInt64())
+}
+
 // 10 11 12 => [10, 11, 12]
-func getli(size int) []int {
+func readIntSlice(size int) []int {
 	a := make([]int, size)
-	list := strings.Split(read(), " ")
-	for i, s := range list {
-		n, _ := strconv.Atoi(s)
-		a[i] = n
+	for i := 0; i < size; i++ {
+		a[i] = readInt()
 	}
 	return a
 }
@@ -108,21 +124,37 @@ func max(integers ...int) int {
 	return m
 }
 
-func divisor(n int) []int {
-	maxDivisor := int(math.Sqrt(float64(n)))
-	divisors := make([]int, 0, maxDivisor)
-	for i := 1; i <= maxDivisor; i++ {
-		if n%i == 0 {
-			divisors = append(divisors, i)
-			if i != n/i {
-				divisors = append(divisors, n/i)
-			}
-		}
-	}
-	sort.Ints(divisors)
-	return divisors
+func main() {
+	n := readInt()
+	xs := readIntSlice(n)
+	fmt.Println(manhattan(xs))
+	fmt.Println(euclid(xs))
+	fmt.Println(chebyshev(xs))
 }
 
-func main() {
+func manhattan(xs []int) float64 {
+	var sum float64
+	for _, x := range xs {
+		sum += math.Abs(float64(x))
+	}
+	return sum
+}
 
+func euclid(xs []int) float64 {
+	var sum float64
+	for _, x := range xs {
+		sum += float64(x * x)
+	}
+	return math.Sqrt(sum)
+}
+
+func chebyshev(xs []int) float64 {
+	var sum float64
+	for _, x := range xs {
+		tmp := math.Abs(float64(x))
+		if sum < tmp {
+			sum = tmp
+		}
+	}
+	return sum
 }
