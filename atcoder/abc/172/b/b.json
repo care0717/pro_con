@@ -1,0 +1,14 @@
+[
+ {
+  "input": "cupofcoffee\ncupofhottea",
+  "output": "4"
+ },
+ {
+  "input": "abcde\nbcdea",
+  "output": "5"
+ },
+ {
+  "input": "apple\napple",
+  "output": "0"
+ }
+]

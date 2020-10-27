@@ -1,9 +1,10 @@
-package main
+package d
 
 import (
 	"bufio"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 )
@@ -30,13 +31,14 @@ func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
 	}
 }
 
-func readInt64() int64 {
-	n, _ := strconv.ParseInt(ReadString(), 10, 64)
+func readInt() int {
+	n, _ := strconv.Atoi(ReadString())
 	return n
 }
 
-func readInt() int {
-	return int(readInt64())
+func readInt64() int64 {
+	n, _ := strconv.ParseInt(ReadString(), 0, 64)
+	return n
 }
 
 // 10 11 12 => [10, 11, 12]
@@ -124,5 +126,10 @@ func max(integers ...int) int {
 }
 
 func main() {
-
+	a, b, n := readInt64(), readInt64(), readInt64()
+	if b-1 >= n {
+		fmt.Println(int64(math.Floor(float64(a)*float64(n)/float64(b)) - float64(a)*math.Floor(float64(n)/float64(b))))
+	} else {
+		fmt.Println(int64(math.Floor(float64(a)*float64(b-1)/float64(b)) - float64(a)*math.Floor(float64(b-1)/float64(b))))
+	}
 }

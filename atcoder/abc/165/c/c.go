@@ -1,4 +1,4 @@
-package main
+package c
 
 import (
 	"bufio"
@@ -30,13 +30,14 @@ func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
 	}
 }
 
-func readInt64() int64 {
-	n, _ := strconv.ParseInt(ReadString(), 10, 64)
+func readInt() int {
+	n, _ := strconv.Atoi(ReadString())
 	return n
 }
 
-func readInt() int {
-	return int(readInt64())
+func readInt64() int64 {
+	n, _ := strconv.ParseInt(ReadString(), 0, 64)
+	return n
 }
 
 // 10 11 12 => [10, 11, 12]
@@ -124,5 +125,54 @@ func max(integers ...int) int {
 }
 
 func main() {
+	N, M, Q := readInt(), readInt(), readInt()
+	var A, B, C, D []int
+	for i := 0; i < Q; i++ {
+		A = append(A, readInt()-1)
+		B = append(B, readInt()-1)
+		C = append(C, readInt())
+		D = append(D, readInt())
+	}
+	list := make([]int, N)
+	for i := 0; i < N; i++ {
+		list[i] = 1
+	}
+	max := 0
+	for i := 0; i < 1000000; i++ {
+		score := solve(Q, list, A, B, C, D)
+		if max < score {
+			max = score
+		}
+		if list[0] == M {
+			break
+		}
+		increment(list, N, M)
+	}
+	fmt.Println(max)
+}
 
+func increment(list []int, n, m int) []int {
+	l := []int{}
+	for i := 0; i < n; i++ {
+		if list[n-1-i] == m {
+			l = append(l, n-1-i)
+			continue
+		}
+		list[n-1-i]++
+		for _, v := range l {
+			list[v] = list[n-1-i]
+		}
+		break
+	}
+	return list
+}
+
+func solve(q int, list, a, b, c, d []int) int {
+	sum := 0
+	for i := 0; i < q; i++ {
+		if list[b[i]]-list[a[i]] == c[i] {
+			sum += d[i]
+		}
+	}
+	return sum
 }

@@ -123,6 +123,48 @@ func max(integers ...int) int {
 	return m
 }
 
+type Range struct {
+	Left  int
+	Right int
+}
+
 func main() {
+	var mod int64 = 998244353
+	N, K := readInt(), readInt()
+	var ranges []Range
+	for i := 0; i < K; i++ {
+		ranges = append(ranges, Range{
+			Left:  1 - readInt(),
+			Right: -readInt(),
+		})
+	}
+	results := make([]int64, N)
+	results[0] = 1
+	rangeSum := make([]int64, K)
+	for i := 1; i < N; i++ {
+
+		for j, r := range ranges {
+			if r.Right >= 0 {
+				rangeSum[j] -= results[r.Right]
+			}
+			if r.Left >= 0 {
+				rangeSum[j] += results[r.Left]
+			}
+			rangeSum[j] %= mod
+			if rangeSum[j] < 0 {
+				rangeSum[j] += mod
+			}
+			ranges[j].Right++
+			ranges[j].Left++
+		}
+		for _, s := range rangeSum {
+			results[i] += s
+			results[i] %= mod
+			if results[i] < 0 {
+				results[i] += mod
+			}
+		}
+	}
+	fmt.Println(results[N-1])
 
 }

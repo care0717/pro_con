@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 )
 
 var (
@@ -30,13 +31,9 @@ func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
 	}
 }
 
-func readInt64() int64 {
-	n, _ := strconv.ParseInt(ReadString(), 10, 64)
-	return n
-}
-
 func readInt() int {
-	return int(readInt64())
+	n, _ := strconv.Atoi(ReadString())
+	return n
 }
 
 // 10 11 12 => [10, 11, 12]
@@ -124,5 +121,47 @@ func max(integers ...int) int {
 }
 
 func main() {
+	h, w, k := readInt(), readInt(), readInt()
+	var cs []string
+	for i := 0; i < h; i++ {
+		cs = append(cs, ReadString())
+	}
+	var res [][]int
+	whiteRow := strings.Repeat(".", w)
+	for hbit := 0; hbit < 1<<uint64(h); hbit++ {
+		for wbit := 0; wbit < 1<<uint64(w); wbit++ {
+			tmp := make([]string, len(cs))
+			copy(tmp, cs)
+			for i := 0; i < h; i++ {
+				for j := 0; j < w; j++ {
+					if (hbit>>uint64(i))&1 == 1 {
+						tmp[i] = whiteRow
+					}
+					if (wbit>>uint64(j))&1 == 1 {
+						for k := 0; k < h; k++ {
+							out := []byte(tmp[k])
+							out[j] = '.'
+							tmp[k] = string(out)
+						}
+					}
+				}
+			}
+			if calcScore(tmp) == k {
+				res = append(res, []int{hbit, wbit})
+			}
+		}
+	}
+	fmt.Println(len(res))
+}
 
+func calcScore(cs []string) int {
+	var counter int
+	for _, strs := range cs {
+		for _, c := range strs {
+			if c == '#' {
+				counter++
+			}
+		}
+	}
+	return counter
 }
