@@ -1,0 +1,10 @@
+[
+ {
+  "input": "5\noof",
+  "output": "575111451"
+ },
+ {
+  "input": "37564\nwhydidyoudesertme",
+  "output": "318008117"
+ }
+]

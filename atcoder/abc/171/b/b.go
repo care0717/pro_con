@@ -182,62 +182,6 @@ func (u *UnionFind) Unite(x, y int) {
 	}
 }
 
-type Deque interface {
-	Push(x int)
-	Unshift(x int)
-	Empty() bool
-	Pop() (int, error)
-	Shift() (int, error)
-}
-
-type DequeList struct {
-	prep []int
-	ap   []int
-}
-
-func NewDequeList() Deque {
-	return &DequeList{}
-}
-
-func (d *DequeList) Push(x int) {
-	d.ap = append(d.ap, x)
-}
-func (d *DequeList) Unshift(x int) {
-	d.prep = append(d.prep, x)
-}
-func (d DequeList) Empty() bool {
-	return len(d.prep) == 0 && len(d.ap) == 0
-}
-
-func (d *DequeList) Pop() (int, error) {
-	if d.Empty() {
-		return 0, errors.New("deque is empty")
-	}
-	lenAp := len(d.ap)
-	if lenAp > 0 {
-		v := d.ap[lenAp-1]
-		d.ap = d.ap[:lenAp-1]
-		return v, nil
-	}
-	v := d.prep[0]
-	d.prep = d.prep[1:]
-	return v, nil
-}
-func (d *DequeList) Shift() (int, error) {
-	if d.Empty() {
-		return 0, errors.New("deque is empty")
-	}
-	lenPrep := len(d.prep)
-	if lenPrep > 0 {
-		v := d.prep[lenPrep-1]
-		d.prep = d.prep[:lenPrep-1]
-		return v, nil
-	}
-	v := d.ap[0]
-	d.ap = d.ap[1:]
-	return v, nil
-}
-
 func main() {
 
 }
