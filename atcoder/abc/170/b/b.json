@@ -1,0 +1,10 @@
+[
+ {
+  "input": "3 8",
+  "output": "Yes"
+ },
+ {
+  "input": "2 100",
+  "output": "No"
+ }
+]
