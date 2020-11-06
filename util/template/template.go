@@ -141,6 +141,42 @@ func divisor(n int) []int {
 	return divisors
 }
 
+func primeFactorize(n int) []struct {
+	prime int
+	index int
+} {
+	if n <= 1 {
+		return nil
+	}
+	maxPrime := int(math.Sqrt(float64(n)))
+	var result []struct {
+		prime int
+		index int
+	}
+	tmp := n
+	for p := 2; p <= maxPrime; p++ {
+		if tmp%p == 0 {
+			index := 1
+			tmp = tmp / p
+			for tmp%p == 0 {
+				index++
+				tmp /= p
+			}
+			result = append(result, struct {
+				prime int
+				index int
+			}{p, index})
+		}
+	}
+	if tmp > 1 {
+		result = append(result, struct {
+			prime int
+			index int
+		}{tmp, 1})
+	}
+	return result
+}
+
 type UnionFind struct {
 	parent []int
 	rank   []int
