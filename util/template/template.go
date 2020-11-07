@@ -142,16 +142,16 @@ func divisor(n int) []int {
 }
 
 func primeFactorize(n int) []struct {
-	prime int
-	index int
+	Prime int
+	Index int
 } {
 	if n <= 1 {
 		return nil
 	}
 	maxPrime := int(math.Sqrt(float64(n)))
 	var result []struct {
-		prime int
-		index int
+		Prime int
+		Index int
 	}
 	tmp := n
 	for p := 2; p <= maxPrime; p++ {
@@ -163,15 +163,15 @@ func primeFactorize(n int) []struct {
 				tmp /= p
 			}
 			result = append(result, struct {
-				prime int
-				index int
+				Prime int
+				Index int
 			}{p, index})
 		}
 	}
 	if tmp > 1 {
 		result = append(result, struct {
-			prime int
-			index int
+			Prime int
+			Index int
 		}{tmp, 1})
 	}
 	return result
