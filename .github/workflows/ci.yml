@@ -1,0 +1,27 @@
+name: procon_golang_test
+on: [push]
+
+jobs:
+  build:
+    name: all
+    runs-on: ubuntu-latest
+    steps:
+      # GOPATHなどのセットアップ
+      - name: set up
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.13
+        id: go
+      # repositoryの中身にアクセスするためのチェックアウト
+      - name: checkout
+        uses: actions/checkout@v2
+      # cache store
+      - name: cache
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: test
+        run: go test ./util/template/... -v
