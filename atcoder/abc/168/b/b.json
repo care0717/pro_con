@@ -1,0 +1,10 @@
+[
+ {
+  "input": "7\nnikoandsolstice",
+  "output": "nikoand..."
+ },
+ {
+  "input": "40\nferelibenterhominesidquodvoluntcredunt",
+  "output": "ferelibenterhominesidquodvoluntcredunt"
+ }
+]
