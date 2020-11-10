@@ -1,0 +1,10 @@
+[
+ {
+  "input": "chokudai\nchokudaiz",
+  "output": "Yes"
+ },
+ {
+  "input": "snuke\nsnekee",
+  "output": "No"
+ }
+]
