@@ -117,6 +117,9 @@ func test(contestName, problemName string) error {
 
 func create(contestName string) error {
 	c := model.NewContest(contestName)
+	if c.ExistDir() {
+		return fmt.Errorf("directory already exists. %s", c.DirName())
+	}
 
 	cookieJar, _ := cookiejar.New(nil)
 	client := &http.Client{
@@ -132,7 +135,6 @@ func create(contestName string) error {
 	if !c.ValidContest(client) {
 		return fmt.Errorf("invalid contest name: %s", contestName)
 	}
-
 	if err := c.CreateDir(); err != nil {
 		return err
 	}
