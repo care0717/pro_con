@@ -180,16 +180,18 @@ func primeFactorize(n int) []struct {
 type UnionFind struct {
 	parent []int
 	rank   []int
+	size   []int
 }
 
 func NewUnionFind(size int) *UnionFind {
 	initParent := make([]int, size)
 	initRank := make([]int, size)
+	initSize := make([]int, size)
 	for i := 0; i < size; i++ {
 		initParent[i] = i
-		initRank[i] = 0
+		initSize[i] = 1
 	}
-	return &UnionFind{parent: initParent, rank: initRank}
+	return &UnionFind{parent: initParent, rank: initRank, size: initSize}
 }
 func (u *UnionFind) Root(x int) int {
 	if u.parent[x] == x {
@@ -209,14 +211,20 @@ func (u *UnionFind) Unite(x, y int) {
 		return
 	}
 
-	if u.rank[rootX] < u.rank[rootY] {
+	if u.rank[rootX] <= u.rank[rootY] {
 		u.parent[rootX] = rootY
-	} else {
-		u.parent[rootY] = rootX
 		if u.rank[rootX] == u.rank[rootY] {
 			u.rank[rootX]++
 		}
+	} else {
+		u.parent[rootY] = rootX
+		rootX, rootY = rootY, rootX
+
 	}
+	u.size[rootY] += u.size[rootX]
+}
+func (u *UnionFind) Size(x int) int {
+	return u.size[u.Root(x)]
 }
 
 type Deque interface {
