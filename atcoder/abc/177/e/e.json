@@ -1,0 +1,14 @@
+[
+ {
+  "input": "3\n3 4 5",
+  "output": "pairwise coprime"
+ },
+ {
+  "input": "3\n6 10 15",
+  "output": "setwise coprime"
+ },
+ {
+  "input": "3\n6 10 16",
+  "output": "not coprime"
+ }
+]
