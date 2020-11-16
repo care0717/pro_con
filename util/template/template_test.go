@@ -93,3 +93,49 @@ func TestDivisor(t *testing.T) {
 		})
 	}
 }
+
+func TestUnionFind(t *testing.T) {
+	type pair struct {
+		x, y int
+	}
+	tests := []struct {
+		name          string
+		size          int
+		unites        []pair
+		expectSame    []pair
+		expectNotSame []pair
+	}{
+		{
+			name: "normal",
+			size: 3,
+			unites: []pair{
+				{x: 0, y: 1},
+			},
+			expectSame: []pair{
+				{x: 1, y: 0},
+			},
+			expectNotSame: []pair{
+				{x: 0, y: 2},
+				{x: 1, y: 2},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := NewUnionFind(tt.size)
+			for _, p := range tt.unites {
+				u.Unite(p.x, p.y)
+			}
+			for _, p := range tt.expectSame {
+				if got := u.Same(p.x, p.y); !got {
+					t.Errorf("u.Same(%d, %d) expect true but got false", p.x, p.y)
+				}
+			}
+			for _, p := range tt.expectNotSame {
+				if got := u.Same(p.x, p.y); got {
+					t.Errorf("u.Same(%d, %d) expect false but got true", p.x, p.y)
+				}
+			}
+		})
+	}
+}
