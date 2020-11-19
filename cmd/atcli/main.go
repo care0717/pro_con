@@ -79,9 +79,22 @@ func test(contestName, problemName string) error {
 	}
 	targetFilePath := path.Join(c.DirName(), subdir, fmt.Sprintf("%s.go", problemName))
 	execPath := path.Join("/tmp", problemName)
-	if err := exec.Command("go", "build", "-o", execPath, targetFilePath).Run(); err != nil {
-		return errors.Wrap(err, "failed go build")
+	cmd := exec.Command("go", "build", "-o", execPath, targetFilePath)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
 	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	slurp, _ := ioutil.ReadAll(stderr)
+	if len(slurp) != 0 {
+		return fmt.Errorf("failed go build.\n %s", slurp)
+	}
+	if err := cmd.Wait(); err != nil {
+		return err
+	}
+
 	defer os.Remove(execPath)
 	for i, s := range samples {
 		timeoutLimit := 2 * time.Second
@@ -91,12 +104,29 @@ func test(contestName, problemName string) error {
 		if err != nil {
 			return err
 		}
+
 		go func() {
 			defer stdin.Close()
 			io.WriteString(stdin, s.Input)
 		}()
-		out, err := cmd.Output()
+		stderr, err := cmd.StderrPipe()
 		if err != nil {
+			return err
+		}
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return err
+		}
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+
+		slurp, _ := ioutil.ReadAll(stderr)
+		if len(slurp) != 0 {
+			return errors.New(string(slurp))
+		}
+
+		if err := cmd.Wait(); err != nil {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				err = errors.Wrap(err, fmt.Sprintf("In case %d, context deadline exceeded (over %s)", i, timeoutLimit.String()))
 			} else if ctx.Err() != nil {
@@ -104,6 +134,7 @@ func test(contestName, problemName string) error {
 			}
 			return err
 		}
+		out, _ := ioutil.ReadAll(stdout)
 		actual := strings.TrimRight(string(out), "\n")
 		if actual == s.Output {
 			fmt.Printf("case %d OK\n", i)
