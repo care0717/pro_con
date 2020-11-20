@@ -92,6 +92,43 @@ func comb(n, m int) int {
 	return fact(n, n-m) / fact(m, 0)
 }
 
+// 初期化にo(n)
+// Combinationの計算はo(1)
+type ModComb struct {
+	mod     int
+	fact    []int
+	inv     []int
+	factInv []int
+}
+
+func NewModComb(n, mod int) ModComb {
+	if n <= 0 {
+		n = 1
+	}
+	initFact := make([]int, n+1)
+	initFactInv := make([]int, n+1)
+	initInv := make([]int, n+1)
+	initFact[0], initFact[1] = 1, 1
+	initFactInv[0], initFactInv[1] = 1, 1
+	initInv[1] = 1
+	for i := 2; i <= n; i++ {
+		initFact[i] = initFact[i-1] * i % mod
+		initInv[i] = mod - (initInv[mod%i] * (mod / i) % mod)
+		initFactInv[i] = (initFactInv[i-1] * initInv[i]) % mod
+	}
+
+	return ModComb{mod: mod, fact: initFact, inv: initInv, factInv: initFactInv}
+}
+func (m ModComb) Comb(n, k int) int {
+	if n < k {
+		return 0
+	}
+	if n < 0 || k < 0 {
+		return 0
+	}
+	return m.fact[n] * (m.factInv[k] * m.factInv[n-k] % m.mod) % m.mod
+}
+
 func reverse(s string) string {
 	runes := []rune(s)
 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
