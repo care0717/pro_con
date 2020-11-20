@@ -125,6 +125,7 @@ func test(contestName, problemName string) error {
 		if len(slurp) != 0 {
 			return errors.New(string(slurp))
 		}
+		out, _ := ioutil.ReadAll(stdout)
 
 		if err := cmd.Wait(); err != nil {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -134,7 +135,6 @@ func test(contestName, problemName string) error {
 			}
 			return err
 		}
-		out, _ := ioutil.ReadAll(stdout)
 		actual := strings.TrimRight(string(out), "\n")
 		if actual == s.Output {
 			fmt.Printf("case %d OK\n", i)
