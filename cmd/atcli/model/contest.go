@@ -104,7 +104,7 @@ func (c Contest) CreateSubDir(subdir string) error {
 }
 
 func (c Contest) CopyTemplate(name, subdir string) error {
-	src, err := os.Open("util/template/template.go")
+	src, err := os.Open("library/template/template.go")
 	if err != nil {
 		return err
 	}

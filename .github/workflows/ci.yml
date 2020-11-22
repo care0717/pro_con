@@ -23,5 +23,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - name: test
-        run: go test ./util/template/... -v
+      - name: template-test
+        run: go test ./library/template/... -v
+      - name: cmd-test
+        run: go test ./cmd/... -v

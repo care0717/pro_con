@@ -4,6 +4,7 @@ import (
 	"github.com/care0717/pro_con/cmd/atcli/util"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+	"io"
 	"net/http"
 	"path"
 	"strings"
@@ -37,12 +38,16 @@ func (p Problem) FetchSamples(client *http.Client) ([]Sample, error) {
 		return nil, err
 	}
 	defer r.Body.Close()
-	node, err := html.Parse(r.Body)
+	return ParseSample(r.Body)
+}
+
+func ParseSample(body io.Reader) ([]Sample, error) {
+	node, err := html.Parse(body)
 	if err != nil {
 		return nil, err
 	}
 
-	res := util.Unique(findSampleTexts(node))[1:]
+	res := util.Unique(findSampleTexts(node))
 	samples := make([]Sample, len(res)/2)
 	for i := 0; i < len(res)/2; i++ {
 		samples[i] = Sample{
@@ -56,7 +61,7 @@ func (p Problem) FetchSamples(client *http.Client) ([]Sample, error) {
 func findSampleTexts(node *html.Node) []string {
 	if node.DataAtom == atom.Pre {
 		for c := node.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.TextNode {
+			if c.Type == html.TextNode && strings.TrimSpace(c.Data) != "" {
 				return []string{strings.TrimRight(c.Data, "\n")}
 			}
 		}
