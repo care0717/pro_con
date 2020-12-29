@@ -1,0 +1,10 @@
+[
+ {
+  "input": "3 0\nxox",
+  "output": "0"
+ },
+ {
+  "input": "20 199999\noooooooooxoooooooooo",
+  "output": "200017"
+ }
+]
