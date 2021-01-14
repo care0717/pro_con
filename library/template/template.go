@@ -320,6 +320,26 @@ func (d *DequeList) Shift() (int, error) {
 	return v, nil
 }
 
+// 累積和
+type cumulativeSum struct {
+	s []int
+}
+
+// 累積和の対象となる配列を入れる
+func NewCumulativeSum(as []int) cumulativeSum {
+	n := len(as)
+	sum := make([]int, n+1)
+	for i := 0; i < n; i++ {
+		sum[i+1] = sum[i] + as[i]
+	}
+	return cumulativeSum{s: sum}
+}
+
+// 半開区間で入れる。すべての和がほしければa=0,b=n
+func (c cumulativeSum) Get(a, b int) int {
+	return c.s[b] - c.s[a]
+}
+
 func main() {
 
 }
