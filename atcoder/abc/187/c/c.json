@@ -1,0 +1,10 @@
+[
+ {
+  "input": "6\na\n!a\nb\n!c\nd\n!d",
+  "output": "a"
+ },
+ {
+  "input": "10\nred\nred\nred\n!orange\nyellow\n!blue\ncyan\n!green\nbrown\n!gray",
+  "output": "satisfiable"
+ }
+]
