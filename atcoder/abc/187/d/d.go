@@ -341,5 +341,25 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
+	n := readInt()
+	var as, bs, diffs []int
+	var aokiBote, takahashiBote, count int
+	for i := 0; i < n; i++ {
+		a := readInt()
+		b := readInt()
+		diffs = append(diffs, a+b+a)
+		as = append(as, a)
+		bs = append(bs, b)
+		aokiBote += a
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(diffs)))
 
+	for _, d := range diffs {
+		takahashiBote += d
+		count += 1
+		if takahashiBote > aokiBote {
+			break
+		}
+	}
+	fmt.Println(count)
 }
