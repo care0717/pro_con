@@ -1,0 +1,14 @@
+[
+ {
+  "input": "11 3 2\nooxxxoxxxoo",
+  "output": "6"
+ },
+ {
+  "input": "5 2 3\nooxoo",
+  "output": "1\n5"
+ },
+ {
+  "input": "5 1 0\nooooo",
+  "output": "16 4 3\nooxxoxoxxxoxoxxo"
+ }
+]
