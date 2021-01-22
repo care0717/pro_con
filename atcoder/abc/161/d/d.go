@@ -163,6 +163,14 @@ func max(integers ...int) int {
 	return m
 }
 
+func sum(integers ...int) int {
+	var s int
+	for _, i := range integers {
+		s += i
+	}
+	return s
+}
+
 func divisor(n int) []int {
 	maxDivisor := int(math.Sqrt(float64(n)))
 	divisors := make([]int, 0, maxDivisor)
@@ -341,5 +349,33 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
+	k := readInt()
+	var list []int
+	stack := NewDequeList()
+	for i := 1; i < 10; i++ {
+		stack.Unshift(i)
+	}
+	result := getRunRun(list, stack)
+	sort.Ints(result)
+	fmt.Println(result[k-1])
 
+}
+
+func getRunRun(list []int, stack Deque) []int {
+	if len(list) >= 100005 {
+		return list
+	}
+	n, _ := stack.Pop()
+	list = append(list, n)
+	s := fmt.Sprintf("%d", n)
+	lastNum, _ := strconv.Atoi(string(s[len(s)-1]))
+
+	for d := -1; d <= 1; d++ {
+		newLastNum := lastNum + d
+		if 0 <= newLastNum && newLastNum <= 9 {
+			newNum, _ := strconv.Atoi(fmt.Sprintf("%s%d", s, newLastNum))
+			stack.Unshift(newNum)
+		}
+	}
+	return getRunRun(list, stack)
 }
