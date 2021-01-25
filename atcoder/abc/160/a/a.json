@@ -1,0 +1,10 @@
+[
+ {
+  "input": "sippuu",
+  "output": "Yes"
+ },
+ {
+  "input": "iphone",
+  "output": "No"
+ }
+]
