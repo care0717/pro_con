@@ -92,6 +92,18 @@ func comb(n, m int) int {
 	return fact(n, n-m) / fact(m, 0)
 }
 
+func modPow(x, n, mod int) int {
+	res := 1
+	for n != 0 {
+		if n%2 == 1 {
+			res = res * x % mod
+		}
+		x = x * x % mod
+		n >>= 1
+	}
+	return res
+}
+
 // 初期化にo(n)
 // Combinationの計算はo(1)
 type ModComb struct {
