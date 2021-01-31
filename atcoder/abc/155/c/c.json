@@ -1,0 +1,18 @@
+[
+ {
+  "input": "7\nbeat\nvet\nbeet\nbed\nvet\nbet\nbeet",
+  "output": "beet\nvet"
+ },
+ {
+  "input": "8\nbuffalo\nbuffalo\nbuffalo\nbuffalo\nbuffalo\nbuffalo\nbuffalo\nbuffalo",
+  "output": "buffalo"
+ },
+ {
+  "input": "7\nbass\nbass\nkick\nkick\nbass\nkick\nkick",
+  "output": "kick"
+ },
+ {
+  "input": "4\nushi\ntapu\nnichia\nkun",
+  "output": "kun\nnichia\ntapu\nushi"
+ }
+]

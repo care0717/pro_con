@@ -1,0 +1,10 @@
+[
+ {
+  "input": "5\n6 7 9 10 31",
+  "output": "APPROVED"
+ },
+ {
+  "input": "3\n28 27 24",
+  "output": "DENIED"
+ }
+]
