@@ -190,6 +190,7 @@ func divisor(n int) []int {
 	return divisors
 }
 
+// O(sqrt(n))
 func primeFactorize(n int) []struct {
 	Prime int
 	Index int
@@ -224,6 +225,33 @@ func primeFactorize(n int) []struct {
 		}{tmp, 1})
 	}
 	return result
+}
+
+func calcGcd(ints ...int) int {
+	if len(ints) == 1 {
+		return ints[0]
+	}
+	tmp := calcPairGcd(ints[0], ints[1])
+	ints = append(ints[2:], tmp)
+	return calcGcd(ints...)
+}
+func calcPairGcd(a, b int) int {
+	if b == 0 {
+		return a
+	} else {
+		return calcPairGcd(b, a%b)
+	}
+}
+func calcLcm(ints ...int) int {
+	if len(ints) == 1 {
+		return ints[0]
+	}
+	tmp := calcPairLcm(ints[0], ints[1])
+	ints = append(ints[2:], tmp)
+	return calcLcm(ints...)
+}
+func calcPairLcm(a, b int) int {
+	return a / calcPairGcd(a, b) * b
 }
 
 type UnionFind struct {
