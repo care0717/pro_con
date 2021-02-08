@@ -361,8 +361,8 @@ func (d *DequeList) Shift() (int, error) {
 }
 
 type Item struct {
-	H        int
-	W        int
+	A        int64
+	C        int64
 	Priority int
 }
 
@@ -455,5 +455,32 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
+	n, c := readInt(), readInt64()
+	plans := NewPriorityQueue(nil)
+	for i := 0; i < n; i++ {
+		a, b, c := readInt64(), readInt64(), readInt64()
+		plans.Push(&Item{
+			A:        a,
+			C:        c,
+			Priority: int(a),
+		})
+		plans.Push(&Item{
+			A:        b + 1,
+			C:        -c,
+			Priority: int(b + 1),
+		})
+	}
 
+	var currentCost, currentDay, total int64
+	for plans.IsNotEmpty() {
+		p, _ := plans.Pop()
+		if currentCost > c {
+			total += c * (p.A - currentDay)
+		} else {
+			total += currentCost * (p.A - currentDay)
+		}
+		currentCost += p.C
+		currentDay = p.A
+	}
+	fmt.Println(total)
 }
