@@ -1,0 +1,10 @@
+[
+ {
+  "input": "2\nAND\nOR",
+  "output": "5"
+ },
+ {
+  "input": "5\nOR\nOR\nOR\nOR\nOR",
+  "output": "63"
+ }
+]
