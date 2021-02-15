@@ -1,0 +1,10 @@
+[
+ {
+  "input": "2 1 0",
+  "output": "Takahashi"
+ },
+ {
+  "input": "2 2 0",
+  "output": "Aoki"
+ }
+]
