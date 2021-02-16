@@ -42,6 +42,11 @@ func readInt() int {
 	return int(readInt64())
 }
 
+func readFloat64() float64 {
+	f, _ := strconv.ParseFloat(ReadString(), 10)
+	return f
+}
+
 // 10 11 12 => [10, 11, 12]
 func readIntSlice(size int) []int {
 	a := make([]int, size)
