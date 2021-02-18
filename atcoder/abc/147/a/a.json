@@ -1,0 +1,10 @@
+[
+ {
+  "input": "5 7 9",
+  "output": "win"
+ },
+ {
+  "input": "13 7 2",
+  "output": "bust"
+ }
+]
