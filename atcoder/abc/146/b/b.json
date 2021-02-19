@@ -1,0 +1,14 @@
+[
+ {
+  "input": "2\nABCXYZ",
+  "output": "CDEZAB"
+ },
+ {
+  "input": "0\nABCXYZ",
+  "output": "ABCXYZ"
+ },
+ {
+  "input": "13\nABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  "output": "NOPQRSTUVWXYZABCDEFGHIJKLM"
+ }
+]
