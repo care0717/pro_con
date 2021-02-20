@@ -1,0 +1,10 @@
+[
+ {
+  "input": "dIfFiCuLt",
+  "output": "Yes"
+ },
+ {
+  "input": "eASY",
+  "output": "No"
+ }
+]
