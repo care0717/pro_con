@@ -1,0 +1,10 @@
+[
+ {
+  "input": "6\nabcabc",
+  "output": "Yes"
+ },
+ {
+  "input": "6\nabcadc",
+  "output": "No"
+ }
+]
