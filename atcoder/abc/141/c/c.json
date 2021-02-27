@@ -1,0 +1,14 @@
+[
+ {
+  "input": "6 3 4\n3\n1\n3\n2",
+  "output": "No\nNo\nYes\nNo\nNo\nNo"
+ },
+ {
+  "input": "6 5 4\n3\n1\n3\n2",
+  "output": "Yes\nYes\nYes\nYes\nYes\nYes"
+ },
+ {
+  "input": "10 13 15\n3\n1\n4\n1\n5\n9\n2\n6\n5\n3\n5\n8\n9\n7\n9",
+  "output": "No\nNo\nNo\nNo\nYes\nNo\nNo\nNo\nYes\nNo"
+ }
+]

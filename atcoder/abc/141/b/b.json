@@ -1,0 +1,14 @@
+[
+ {
+  "input": "RUDLUDR",
+  "output": "Yes"
+ },
+ {
+  "input": "DULL",
+  "output": "No"
+ },
+ {
+  "input": "UUUUUUUUUUUUUUU",
+  "output": "ULURU"
+ }
+]
