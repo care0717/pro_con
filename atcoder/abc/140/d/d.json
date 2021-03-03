@@ -1,0 +1,14 @@
+[
+ {
+  "input": "6 1\nLRLRRL",
+  "output": "3"
+ },
+ {
+  "input": "13 3\nLRRLRLRRLRLLR",
+  "output": "9"
+ },
+ {
+  "input": "10 1\nLLLLLRRRRR",
+  "output": "9 2\nRRRLRLRLL"
+ }
+]
