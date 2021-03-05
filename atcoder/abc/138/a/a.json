@@ -1,0 +1,10 @@
+[
+ {
+  "input": "3200\npink",
+  "output": "pink"
+ },
+ {
+  "input": "3199\npink",
+  "output": "red"
+ }
+]
