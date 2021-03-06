@@ -1,0 +1,14 @@
+[
+ {
+  "input": "3\nacornistnt\npeanutbomb\nconstraint",
+  "output": "1"
+ },
+ {
+  "input": "2\noneplustwo\nninemodsix",
+  "output": "0"
+ },
+ {
+  "input": "5\nabaaaaaaaa\noneplustwo\naaaaaaaaba\ntwoplusone\naaaabaaaaa",
+  "output": "4"
+ }
+]
