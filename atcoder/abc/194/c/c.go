@@ -462,5 +462,17 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
-
+	n := readInt()
+	as := readIntSlice(n)
+	powas := make([]int, n)
+	for i, a := range as {
+		powas[i] = a * a
+	}
+	powc := NewCumulativeSum(powas)
+	c := NewCumulativeSum(as)
+	var sum int
+	for i := 0; i < n; i++ {
+		sum += i*as[i]*as[i] - 2*as[i]*(c.Get(0, i)) + powc.Get(0, i)
+	}
+	fmt.Println(sum)
 }
