@@ -462,5 +462,14 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
-
+	n := readInt()
+	a := make(map[int]struct{})
+	for i := 2; i <= 100000; i++ {
+		pow := i * i
+		for pow <= n {
+			a[pow] = struct{}{}
+			pow *= i
+		}
+	}
+	fmt.Println(n - len(a))
 }
