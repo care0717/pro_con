@@ -14,8 +14,7 @@ import (
 var (
 	// ReadString returns a WORD string.
 	ReadString func() string
-
-	MOD = 1000000007
+	MOD        = 1000000007
 )
 
 func init() {

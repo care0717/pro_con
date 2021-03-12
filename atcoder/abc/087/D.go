@@ -1,7 +1,6 @@
 package main
 
 import "fmt"
-import . "../../template"
 
 func main() {
 	as := Getli(2)

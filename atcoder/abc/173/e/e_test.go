@@ -1,4 +1,4 @@
-package e_test
+package main
 
 import (
 	"github.com/care0717/pro_con/atcoder/abc/173/e"
