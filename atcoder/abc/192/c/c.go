@@ -460,5 +460,24 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
+	n, k := readInt(), readInt()
+	for i := 0; i < k; i++ {
+		n = f1(n)
+	}
+	fmt.Println(n)
+}
 
+func f1(n int) int {
+	r1 := []rune(fmt.Sprintf("%d", n))
+	r2 := []rune(fmt.Sprintf("%d", n))
+	sort.Slice(r1, func(i, j int) bool {
+		return r1[i] > r1[j]
+	})
+	sort.Slice(r2, func(i, j int) bool {
+		return r2[i] < r2[j]
+	})
+
+	g1, _ := strconv.Atoi(string(r1))
+	g2, _ := strconv.Atoi(string(r2))
+	return g1 - g2
 }
