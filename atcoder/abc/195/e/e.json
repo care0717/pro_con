@@ -1,0 +1,14 @@
+[
+ {
+  "input": "2\n35\nAT",
+  "output": "Takahashi"
+ },
+ {
+  "input": "5\n12345\nAAAAT",
+  "output": "Aoki"
+ },
+ {
+  "input": "5\n67890\nTTTTA",
+  "output": "5\n12345\nATATA"
+ }
+]

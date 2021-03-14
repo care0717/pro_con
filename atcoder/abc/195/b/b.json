@@ -1,0 +1,14 @@
+[
+ {
+  "input": "100 200 2",
+  "output": "10 20"
+ },
+ {
+  "input": "120 150 2",
+  "output": "14 16"
+ },
+ {
+  "input": "300 333 1",
+  "output": "UNSATISFIABLE"
+ }
+]
