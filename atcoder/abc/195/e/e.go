@@ -461,5 +461,30 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
-
+	WINMOD := 7
+	n := readInt()
+	ss := ReadString()
+	xs := ReadString()
+	winCase := make([]bool, WINMOD)
+	winCase[0] = true
+	index := 1
+	for i := n - 1; i >= 0; i-- {
+		s, _ := strconv.Atoi(string(ss[i]))
+		m := (s * index) % WINMOD
+		newWinCase := make([]bool, WINMOD)
+		for j := 0; j < WINMOD; j++ {
+			if xs[i] == 'T' {
+				newWinCase[j] = winCase[j] || winCase[(j+m)%WINMOD]
+			} else {
+				newWinCase[j] = winCase[j] && winCase[(j+m)%WINMOD]
+			}
+		}
+		winCase = newWinCase
+		index = (index * 10) % WINMOD
+	}
+	if winCase[0] {
+		fmt.Println("Takahashi")
+	} else {
+		fmt.Println("Aoki")
+	}
 }

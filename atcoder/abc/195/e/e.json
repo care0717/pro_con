@@ -9,6 +9,10 @@
  },
  {
   "input": "5\n67890\nTTTTA",
-  "output": "5\n12345\nATATA"
+  "output": "Takahashi"
+ },
+ {
+  "input": "5\n12345\nATATA",
+  "output": "Aoki"
  }
 ]
