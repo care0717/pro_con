@@ -462,5 +462,37 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
+	n, m := readInt(), readInt()
+	as := readIntSlice(n)
+	counter := make([]int, n)
+	for i := 0; i < m; i++ {
+		counter[as[i]]++
+	}
+	minMex := mex(as[:m])
+	for i := 1; i <= n-m; i++ {
+		counter[as[i-1]]--
+		counter[as[i+m-1]]++
+		if counter[as[i-1]] == 0 {
+			if as[i-1] < minMex {
+				minMex = as[i-1]
+			}
+		}
+	}
+	fmt.Println(minMex)
+}
 
+// O(nlog(n))
+func mex(as []int) int {
+	m := make(map[int]struct{})
+	for _, a := range as {
+		m[a] = struct{}{}
+	}
+	var i int
+	for {
+		if _, ok := m[i]; !ok {
+			break
+		}
+		i++
+	}
+	return i
 }
