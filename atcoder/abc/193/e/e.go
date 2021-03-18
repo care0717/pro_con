@@ -16,6 +16,7 @@ var (
 	ReadString func() string
 
 	MOD = 1000000007
+	INF = 9223372036854775807
 )
 
 func init() {
@@ -462,5 +463,91 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
+	T := readInt()
+	for i := 0; i < T; i++ {
+		x, y, p, q := readInt(), readInt(), readInt(), readInt()
+		a := 2*x + 2*y
+		b := p + q
+		minT := INF
 
+		for t2 := p; t2 < p+q; t2++ {
+			for t1 := x; t1 < x+y; t1++ {
+				c := t2 - t1
+				n, m, ok := calcExtEuclid(a, -b, c)
+				if !ok {
+					continue
+				}
+				gcd := calcGcd(a, b)
+				tmpa := a / gcd
+				tmpb := b / gcd
+				if n < 0 || m < 0 {
+					var k1, k2 int
+					if n < 0 {
+						k1 = -n/tmpb + 1
+					}
+					if m < 0 {
+						k2 = -m/tmpa + 1
+					}
+					k := max(k1, k2)
+					n += k * tmpb
+					m += k * tmpa
+				}
+				if n >= tmpb && m >= tmpa {
+					k := min(n/tmpb, m/tmpa)
+					n -= k * tmpb
+					m -= k * tmpa
+				}
+				t := t1 + a*n
+
+				if 0 < t && t < minT {
+					minT = t
+				}
+			}
+		}
+		if minT == INF {
+			fmt.Println("infinity")
+		} else {
+			fmt.Println(minT)
+		}
+	}
+}
+
+func calcExtEuclid(a, b, c int) (int, int, bool) {
+	var isXMinus, isYMinus, isInverse bool
+	if a < 0 {
+		isXMinus = true
+		a *= -1
+	}
+	if b < 0 {
+		isYMinus = true
+		b *= -1
+	}
+	gcd := calcGcd(a, b)
+	if c%gcd != 0 {
+		return 0, 0, false
+	}
+	if a < b {
+		a, b = b, a
+		isXMinus, isYMinus = isYMinus, isXMinus
+		isInverse = true
+	}
+	x, y := calcExtGcd(a, b)
+	if isXMinus {
+		x *= -1
+	}
+	if isYMinus {
+		y *= -1
+	}
+	if isInverse {
+		return y * (c / gcd), x * (c / gcd), true
+	}
+	return x * (c / gcd), y * (c / gcd), true
+}
+
+func calcExtGcd(a, b int) (int, int) {
+	if b == 0 {
+		return 1, 0
+	}
+	s, t := calcExtGcd(b, a%b)
+	return t, s - a/b*t
 }
