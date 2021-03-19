@@ -139,3 +139,83 @@ func TestUnionFind(t *testing.T) {
 		})
 	}
 }
+
+func TestPriorityQueue(t *testing.T) {
+
+	tests := []struct {
+		name      string
+		items     []*Item
+		pushItems []*Item
+		expected  []*Item
+	}{
+		{
+			name: "valid NewPQ",
+			items: []*Item{
+				{
+					Priority: 3,
+				},
+				{
+					Priority: 1,
+				},
+				{
+					Priority: 2,
+				},
+			},
+			pushItems: nil,
+			expected: []*Item{
+				{
+					Priority: 1,
+				},
+				{
+					Priority: 2,
+				},
+				{
+					Priority: 3,
+				},
+			},
+		},
+		{
+			name:  "valid Push",
+			items: nil,
+			pushItems: []*Item{
+				{
+					Priority: 5,
+				},
+				{
+					Priority: -3,
+				},
+				{
+					Priority: 2,
+				},
+			},
+			expected: []*Item{
+				{
+					Priority: -3,
+				},
+				{
+					Priority: 2,
+				},
+				{
+					Priority: 5,
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pq := NewPriorityQueue(tt.items)
+			for _, item := range tt.pushItems {
+				pq.Push(item)
+			}
+			for _, e := range tt.expected {
+				got, _ := pq.Pop()
+				if !cmp.Equal(got, e) {
+					t.Errorf("pq.Pop = %v, want %v", got, e)
+				}
+			}
+			if pq.IsNotEmpty() {
+				t.Errorf("pq is not empty")
+			}
+		})
+	}
+}

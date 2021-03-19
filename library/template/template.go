@@ -15,6 +15,7 @@ var (
 	// ReadString returns a WORD string.
 	ReadString func() string
 	MOD        = 1000000007
+	INF        = 9223372036854775807
 )
 
 func init() {
@@ -367,11 +368,11 @@ func (d *DequeList) Shift() (int, error) {
 }
 
 type Item struct {
-	H        int
-	W        int
+	Cost     int
 	Priority int
 }
 
+// Priorityの低いものが先に出てくる
 type PriorityQueue struct {
 	items []*Item
 }
