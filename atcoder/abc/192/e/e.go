@@ -14,6 +14,7 @@ import (
 var (
 	// ReadString returns a WORD string.
 	ReadString func() string
+	INF        = 9223372036854775807
 )
 
 func init() {
@@ -366,8 +367,8 @@ func (d *DequeList) Shift() (int, error) {
 }
 
 type Item struct {
-	H        int
-	W        int
+	A        int
+	Cost     int
 	Priority int
 }
 
@@ -460,5 +461,67 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
+	n, m, x, y := readInt(), readInt(), readInt()-1, readInt()-1
+	type schedule struct {
+		t int
+		k int
+	}
+	edges := make([]map[int][]schedule, n)
+	for i := 0; i < n; i++ {
+		edges[i] = make(map[int][]schedule)
+	}
+	for i := 0; i < m; i++ {
+		a, b, t, k := readInt()-1, readInt()-1, readInt(), readInt()
+		edges[a][b] = append(edges[a][b], schedule{
+			t: t,
+			k: k,
+		})
+		edges[b][a] = append(edges[a][b], schedule{
+			t: t,
+			k: k,
+		})
+	}
+	pq := NewPriorityQueue([]*Item{
+		{
+			A:        x,
+			Cost:     0,
+			Priority: 0,
+		},
+	})
+	visited := make([]bool, n)
+	costs := make([]int, n)
+	for pq.IsNotEmpty() {
+		item, _ := pq.Pop()
+		if visited[item.A] {
+			continue
+		}
+		visited[item.A] = true
+		costs[item.A] = item.Cost
+		for to, schedules := range edges[item.A] {
+			if visited[to] {
+				continue
+			}
+			minCost := INF
+			for _, s := range schedules {
+				cost := item.Cost + s.t
+				if item.Cost%s.k != 0 {
+					cost += s.k - item.Cost%s.k
+				}
+				if cost < minCost {
+					minCost = cost
+				}
+			}
+			pq.Push(&Item{
+				A:        to,
+				Cost:     minCost,
+				Priority: minCost,
+			})
+		}
+	}
+	if costs[y] == 0 {
+		fmt.Println(-1)
+	} else {
+		fmt.Println(costs[y])
+	}
 
 }
