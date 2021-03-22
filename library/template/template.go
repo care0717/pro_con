@@ -367,21 +367,37 @@ func (d *DequeList) Shift() (int, error) {
 	return v, nil
 }
 
-type Item struct {
-	Cost     int
-	Priority int
+type SimpleItem struct {
+	N int
+	C int
+}
+
+func (i SimpleItem) Priority() int {
+	return i.C
+}
+func (i SimpleItem) Cost() int {
+	return i.C
+}
+func (i SimpleItem) Node() int {
+	return i.N
+}
+
+type Item interface {
+	Priority() int
+	Cost() int
+	Node() int
 }
 
 // Priorityの低いものが先に出てくる
 type PriorityQueue struct {
-	items []*Item
+	items []Item
 }
 
-func (pq *PriorityQueue) Push(item *Item) {
+func (pq *PriorityQueue) Push(item Item) {
 	index := len(pq.items)
 	for index > 0 {
 		parentIndex := (index - 1) / 2
-		if pq.items[parentIndex].Priority <= item.Priority {
+		if pq.items[parentIndex].Priority() <= item.Priority() {
 			break
 		}
 		if index == len(pq.items) {
@@ -397,7 +413,7 @@ func (pq *PriorityQueue) Push(item *Item) {
 		pq.items[index] = item
 	}
 }
-func (pq *PriorityQueue) Pop() (*Item, error) {
+func (pq *PriorityQueue) Pop() (Item, error) {
 	n := len(pq.items)
 	if n == 0 {
 		return nil, errors.New("PriorityQueue is empty")
@@ -414,10 +430,10 @@ func (pq *PriorityQueue) Pop() (*Item, error) {
 	for index*2+1 < n {
 		a := index*2 + 1
 		b := index*2 + 2
-		if b < n && pq.items[b].Priority < pq.items[a].Priority {
+		if b < n && pq.items[b].Priority() < pq.items[a].Priority() {
 			a = b
 		}
-		if pq.items[a].Priority >= last.Priority {
+		if pq.items[a].Priority() >= last.Priority() {
 			break
 		}
 		pq.items[index] = pq.items[a]
@@ -430,10 +446,10 @@ func (pq *PriorityQueue) Pop() (*Item, error) {
 	}
 	return popItem, nil
 }
-func (pq *PriorityQueue) IsNotEmpty() bool {
+func (pq PriorityQueue) IsNotEmpty() bool {
 	return len(pq.items) > 0
 }
-func NewPriorityQueue(items []*Item) *PriorityQueue {
+func NewPriorityQueue(items []Item) *PriorityQueue {
 	pq := &PriorityQueue{}
 	for _, i := range items {
 		pq.Push(i)
@@ -459,6 +475,42 @@ func NewCumulativeSum(as []int) cumulativeSum {
 // 半開区間で入れる。すべての和がほしければa=0,b=n
 func (c cumulativeSum) Get(a, b int) int {
 	return c.s[b] - c.s[a]
+}
+
+func dijkstra(n int, edges []map[int]int, start int) []int {
+	pq := NewPriorityQueue(nil)
+	pq.Push(SimpleItem{
+		N: start,
+		C: 0,
+	})
+	visited := make([]bool, n)
+	costs := make([]int, n)
+	for i := 0; i < n; i++ {
+		costs[i] = -1
+	}
+	var count int
+	for pq.IsNotEmpty() {
+		i, _ := pq.Pop()
+		if visited[i.Node()] {
+			continue
+		}
+		visited[i.Node()] = true
+		costs[i.Node()] = i.Cost()
+
+		for to, c := range edges[i.Node()] {
+			if visited[to] {
+				continue
+			}
+			cost := i.Cost() + c
+			pq.Push(SimpleItem{
+				N: to,
+				C: cost,
+			})
+		}
+		count++
+	}
+
+	return costs
 }
 
 func main() {

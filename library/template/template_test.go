@@ -144,59 +144,59 @@ func TestPriorityQueue(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		items     []*Item
-		pushItems []*Item
-		expected  []*Item
+		items     []Item
+		pushItems []Item
+		expected  []Item
 	}{
 		{
 			name: "valid NewPQ",
-			items: []*Item{
-				{
-					Priority: 3,
+			items: []Item{
+				SimpleItem{
+					C: 2,
 				},
-				{
-					Priority: 1,
+				SimpleItem{
+					C: 1,
 				},
-				{
-					Priority: 2,
+				SimpleItem{
+					C: 3,
 				},
 			},
 			pushItems: nil,
-			expected: []*Item{
-				{
-					Priority: 1,
+			expected: []Item{
+				SimpleItem{
+					C: 1,
 				},
-				{
-					Priority: 2,
+				SimpleItem{
+					C: 2,
 				},
-				{
-					Priority: 3,
+				SimpleItem{
+					C: 3,
 				},
 			},
 		},
 		{
 			name:  "valid Push",
 			items: nil,
-			pushItems: []*Item{
-				{
-					Priority: 5,
+			pushItems: []Item{
+				SimpleItem{
+					C: 5,
 				},
-				{
-					Priority: -3,
+				SimpleItem{
+					C: -3,
 				},
-				{
-					Priority: 2,
+				SimpleItem{
+					C: 2,
 				},
 			},
-			expected: []*Item{
-				{
-					Priority: -3,
+			expected: []Item{
+				SimpleItem{
+					C: -3,
 				},
-				{
-					Priority: 2,
+				SimpleItem{
+					C: 2,
 				},
-				{
-					Priority: 5,
+				SimpleItem{
+					C: 5,
 				},
 			},
 		},
@@ -204,8 +204,8 @@ func TestPriorityQueue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pq := NewPriorityQueue(tt.items)
-			for _, item := range tt.pushItems {
-				pq.Push(item)
+			for _, i := range tt.pushItems {
+				pq.Push(i)
 			}
 			for _, e := range tt.expected {
 				got, _ := pq.Pop()
