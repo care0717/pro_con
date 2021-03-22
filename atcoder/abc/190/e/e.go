@@ -14,6 +14,7 @@ import (
 var (
 	// ReadString returns a WORD string.
 	ReadString func() string
+	INF        = 9223372036854775807
 )
 
 func init() {
@@ -361,8 +362,8 @@ func (d *DequeList) Shift() (int, error) {
 }
 
 type Item struct {
-	H        int
-	W        int
+	Node     int
+	Cost     int
 	Priority int
 }
 
@@ -455,5 +456,99 @@ func (c cumulativeSum) Get(a, b int) int {
 }
 
 func main() {
+	n, m := readInt(), readInt()
+	edges := make([]map[int]int, n)
+	for i := 0; i < n; i++ {
+		edges[i] = make(map[int]int)
+	}
+	for i := 0; i < m; i++ {
+		a, b := readInt()-1, readInt()-1
+		edges[a][b] = 1
+		edges[b][a] = 1
+	}
+	k := readInt()
+	cs := readIntSlice(k)
+	for i := 0; i < k; i++ {
+		cs[i]--
+	}
+	eachCosts := make([][]int, k)
+	for i, c := range cs {
+		eachCosts[i] = dijkstra(n, edges, c)
+	}
+	for i := 1; i < k; i++ {
+		if eachCosts[0][cs[i]] == -1 {
+			fmt.Println(-1)
+			return
+		}
+	}
+	bit := 1 << k
+	dp := make([][]int, bit)
+	for i := 0; i < bit; i++ {
+		dp[i] = make([]int, k)
+		for j := 0; j < k; j++ {
+			dp[i][j] = INF
+		}
+	}
+	for i := 0; i < k; i++ {
+		dp[1<<i][i] = 1
+	}
+	for s := 1; s < bit; s++ {
+		for j := 0; j < k; j++ {
+			// jがすでにsに含まれていたら意味ないので次へ
+			if s&(1<<j) != 0 {
+				continue
+			}
+			minCost := INF
+			// sの中に含まれるすべてのuからjへの生き方を調べる
+			for u := 0; u < k; u++ {
+				if s&(1<<u) == 0 {
+					continue
+				}
+				cost := dp[s][u] + eachCosts[j][cs[u]]
+				if cost < minCost {
+					minCost = cost
+				}
+			}
+			dp[s|1<<j][j] = minCost
+		}
+	}
+	fmt.Println(min(dp[bit-1]...))
+}
 
+func dijkstra(n int, edges []map[int]int, start int) []int {
+	pq := NewPriorityQueue(nil)
+	pq.Push(&Item{
+		Node:     start,
+		Cost:     0,
+		Priority: 0,
+	})
+	visited := make([]bool, n)
+	costs := make([]int, n)
+	for i := 0; i < n; i++ {
+		costs[i] = -1
+	}
+	var count int
+	for pq.IsNotEmpty() {
+		item, _ := pq.Pop()
+		if visited[item.Node] {
+			continue
+		}
+		visited[item.Node] = true
+		costs[item.Node] = item.Cost
+
+		for to, c := range edges[item.Node] {
+			if visited[to] {
+				continue
+			}
+			cost := item.Cost + c
+			pq.Push(&Item{
+				Node:     to,
+				Cost:     cost,
+				Priority: cost,
+			})
+		}
+		count++
+	}
+
+	return costs
 }
