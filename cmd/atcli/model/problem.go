@@ -30,8 +30,13 @@ func (p Problem) ContestName() string {
 func (p Problem) Name() string {
 	return strings.Split(path.Base(p.href), "_")[1]
 }
+
+func (p Problem) Url() string {
+	return util.Join(endpoint, p.href)
+}
+
 func (p Problem) FetchSamples(client *http.Client) ([]Sample, error) {
-	url := util.Join(endpoint, p.href)
+	url := p.Url()
 
 	r, err := client.Get(url)
 	if err != nil {

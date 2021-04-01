@@ -94,8 +94,13 @@ func (c Contest) CreateDir() error {
 	return os.MkdirAll(c.DirName(), 0755)
 }
 
-func (c Contest) ExistDir() bool {
+func (c Contest) NotExistDir() bool {
 	_, err := os.Stat(c.DirName())
+	return os.IsNotExist(err)
+}
+
+func (c Contest) ExistSubDir(subdir string) bool {
+	_, err := os.Stat(path.Join(c.DirName(), subdir))
 	return !os.IsNotExist(err)
 }
 

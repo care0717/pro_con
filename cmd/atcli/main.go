@@ -44,11 +44,16 @@ Use "atcoder [command] --help" for more infomation about a command`
 			return
 		}
 		contestName := os.Args[2]
-		if err := create(contestName); err != nil {
+		var err error
+		if len(os.Args) == 4 {
+			err = create(contestName, os.Args[3])
+		} else {
+			err = create(contestName, "")
+		}
+		if err != nil {
 			log.Fatal(err)
 			return
 		}
-
 	case "test":
 		if len(os.Args) <= 3 {
 			log.Fatal("please input contest and problem name. like `abc163 A`")
@@ -146,11 +151,8 @@ func test(contestName, problemName string) error {
 	return nil
 }
 
-func create(contestName string) error {
+func create(contestName string, problemName string) error {
 	c := model.NewContest(contestName)
-	if c.ExistDir() {
-		return fmt.Errorf("directory already exists. %s", c.DirName())
-	}
 
 	cookieJar, _ := cookiejar.New(nil)
 	client := &http.Client{
@@ -166,10 +168,14 @@ func create(contestName string) error {
 	if !c.ValidContest(client) {
 		return fmt.Errorf("invalid contest name: %s", contestName)
 	}
-	if err := c.CreateDir(); err != nil {
-		return err
+	if c.NotExistDir() {
+		if err := c.CreateDir(); err != nil {
+			return err
+		}
+		log.Printf("Create dir %s", c.DirName())
+	} else {
+		log.Printf("directory already exists. %s", c.DirName())
 	}
-	log.Printf("Create dir %s", c.DirName())
 
 	hrefs, err := c.FetchProblemHrefs(client)
 	if err != nil {
@@ -177,18 +183,26 @@ func create(contestName string) error {
 	}
 	wg := &sync.WaitGroup{}
 	for _, h := range hrefs {
+		p := model.NewProblem(h)
+		if problemName != "" && p.Name() != problemName {
+			continue
+		}
 		wg.Add(1)
-		go func(h string) {
+		go func(p model.Problem) {
 			defer wg.Done()
-			p := model.NewProblem(h)
+			subdir := p.Name()
+			if c.ExistSubDir(subdir) {
+				log.Printf("directory already exists. %s", subdir)
+				return
+			}
 			samples, err := p.FetchSamples(client)
-			log.Printf("Fetch %s", h)
+			log.Printf("Fetch %s", p.Url())
 			bytes, err := json.MarshalIndent(samples, "", " ")
 			if err != nil {
 				log.Fatal(err)
 				return
 			}
-			subdir := p.Name()
+
 			err = c.CreateSubDir(subdir)
 			if err != nil {
 				log.Fatal(err)
@@ -204,7 +218,7 @@ func create(contestName string) error {
 				log.Fatal(err)
 				return
 			}
-		}(h)
+		}(p)
 	}
 	wg.Wait()
 	return nil
