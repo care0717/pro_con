@@ -234,6 +234,22 @@ func primeFactorize(n int) []struct {
 	return result
 }
 
+func sqrtIntWithFloor(n int) int {
+	right := 0
+	// float64によって丸められて小さくなる分足しておく
+	// 1000は見積もりとしては甘いので無駄は多い
+	left := int(math.Sqrt(float64(n))) + 1000
+	for right+1 < left {
+		mid := (right + left) / 2
+		if mid*mid <= n {
+			right = mid
+		} else {
+			left = mid
+		}
+	}
+	return right
+}
+
 func calcGcd(ints ...int) int {
 	if len(ints) == 1 {
 		return ints[0]
