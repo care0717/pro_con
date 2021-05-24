@@ -1,0 +1,14 @@
+[
+ {
+  "input": "3 3\n---\n+-+\n+--",
+  "output": "Takahashi"
+ },
+ {
+  "input": "2 4\n+++-\n-+-+",
+  "output": "Aoki"
+ },
+ {
+  "input": "1 1\n-",
+  "output": "Draw"
+ }
+]
