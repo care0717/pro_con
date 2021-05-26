@@ -1,0 +1,26 @@
+[
+ {
+  "input": "2 2 4",
+  "output": "baab"
+ },
+ {
+  "input": "2 2 1",
+  "output": "aabb"
+ },
+ {
+  "input": "2 2 2",
+  "output": "abab"
+ },
+ {
+  "input": "2 2 3",
+  "output": "abba"
+ },
+ {
+  "input": "2 2 6",
+  "output": "bbaa"
+ },
+ {
+  "input": "30 30 118264581564861424",
+  "output": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ }
+]
