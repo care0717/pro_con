@@ -92,11 +92,17 @@ func perm(n, r int) int {
 	return fact(n, n-r)
 }
 
+// O(m)
 func comb(n, m int) int {
 	if m > n {
 		return 0
 	}
-	return fact(n, n-m) / fact(m, 0)
+	res := 1
+	for i := 1; i <= m; i++ {
+		res *= n - i + 1
+		res /= i
+	}
+	return res
 }
 
 func modPow(x, n, mod int) int {
