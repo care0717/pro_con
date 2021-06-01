@@ -1,0 +1,14 @@
+[
+ {
+  "input": "4 AGCT",
+  "output": "2"
+ },
+ {
+  "input": "4 ATAT",
+  "output": "4"
+ },
+ {
+  "input": "10 AAATACCGCG",
+  "output": "6"
+ }
+]
