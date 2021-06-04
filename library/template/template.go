@@ -480,12 +480,15 @@ func NewPriorityQueue(items []Item) *PriorityQueue {
 }
 
 // 累積和
+type CumulativeSum interface {
+	Get(a, b int) int
+}
 type cumulativeSum struct {
 	s []int
 }
 
 // 累積和の対象となる配列を入れる
-func NewCumulativeSum(as []int) cumulativeSum {
+func NewCumulativeSum(as []int) CumulativeSum {
 	n := len(as)
 	sum := make([]int, n+1)
 	for i := 0; i < n; i++ {
@@ -497,6 +500,29 @@ func NewCumulativeSum(as []int) cumulativeSum {
 // 半開区間で入れる。すべての和がほしければa=0,b=n
 func (c cumulativeSum) Get(a, b int) int {
 	return c.s[b] - c.s[a]
+}
+
+type CumulativeSum2 interface {
+	Get(x1, y1, x2, y2 int) int
+}
+type cumulativeSum2 struct {
+	s [][]int
+}
+
+func NewCumulativeSum2(as [][]int) CumulativeSum2 {
+	h, w := len(as), len(as[0])
+	s := make([][]int, h+1)
+	s[0] = make([]int, w+1)
+	for i := 0; i < h; i++ {
+		s[i+1] = make([]int, w+1)
+		for j := 0; j < w; j++ {
+			s[i+1][j+1] = s[i][j+1] + s[i+1][j] - s[i][j] + as[i][j]
+		}
+	}
+	return cumulativeSum2{s: s}
+}
+func (c cumulativeSum2) Get(x1, y1, x2, y2 int) int {
+	return c.s[x2][y2] - c.s[x1][y2] - c.s[x2][y1] + c.s[x1][y1]
 }
 
 func dijkstra(n int, edges []map[int]int, start int) []int {
