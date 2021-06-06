@@ -11,6 +11,10 @@ import (
 	"strconv"
 )
 
+func main() {
+
+}
+
 var (
 	// ReadString returns a WORD string.
 	ReadString func() string
@@ -559,8 +563,4 @@ func dijkstra(n int, edges []map[int]int, start int) []int {
 	}
 
 	return costs
-}
-
-func main() {
-
 }
