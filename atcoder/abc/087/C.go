@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
-	"fmt"
 )
 
 var sc = bufio.NewScanner(os.Stdin)
@@ -20,7 +20,7 @@ func geti() int {
 	return n
 }
 
-func getli(size int) ([]int) {
+func getli(size int) []int {
 	a := make([]int, size)
 	list := strings.Split(read(), " ")
 	for i, s := range list {
@@ -38,9 +38,9 @@ func main() {
 	}
 	sum := 0
 	max := 0
-	for i := 0; i < n; i++{
+	for i := 0; i < n; i++ {
 		sum = 0
-		for j := 0; j < n; j++{
+		for j := 0; j < n; j++ {
 			if j <= i {
 				sum += as[0][j]
 			} else {
@@ -50,7 +50,7 @@ func main() {
 				sum += as[1][j]
 			}
 		}
-		if sum > max{
+		if sum > max {
 			max = sum
 		}
 	}

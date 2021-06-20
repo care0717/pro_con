@@ -21,7 +21,7 @@ func geti() int {
 }
 
 // 10 11 12 => [10, 11, 12]
-func getli(size int) ([]int) {
+func getli(size int) []int {
 	a := make([]int, size)
 	list := strings.Split(read(), " ")
 	for i, s := range list {
@@ -31,7 +31,7 @@ func getli(size int) ([]int) {
 	return a
 }
 
-func get2byte(size int) ([][]byte) {
+func get2byte(size int) [][]byte {
 	a := make([][]byte, size)
 	for i := 0; i < size; i++ {
 		var low string
@@ -52,7 +52,7 @@ func transpose(a [][]int) {
 
 func matrix(n, m int) [][]int {
 	mat := make([][]int, n)
-	for i:=0; i<n; i++{
+	for i := 0; i < n; i++ {
 		mat[i] = make([]int, m)
 	}
 	return mat
@@ -64,7 +64,7 @@ func main() {
 	mod := 13
 	dp := matrix(len(S), mod)
 	if S[0] == "?" {
-		for i := 0; i< 10; i++ {
+		for i := 0; i < 10; i++ {
 			dp[0][i] = 1
 		}
 	} else {
@@ -75,7 +75,7 @@ func main() {
 	l := len(S)
 	for _, ch := range S[1:l] {
 		if ch == "?" {
-			for j := 0; j< 10; j++ {
+			for j := 0; j < 10; j++ {
 				num := j
 				for k := 0; k < index; k++ {
 					num = (num * 10) % 13
@@ -86,7 +86,7 @@ func main() {
 				}
 			}
 		} else {
-			num, _ :=  strconv.Atoi(ch)
+			num, _ := strconv.Atoi(ch)
 			for k := 0; k < index; k++ {
 				num = (num * 10) % 13
 			}
@@ -94,8 +94,8 @@ func main() {
 				dp[index][(num+k)%13] += pat
 			}
 		}
-		for i := 0; i< mod; i++{
-			dp[index][i] = dp[index][i]%M
+		for i := 0; i < mod; i++ {
+			dp[index][i] = dp[index][i] % M
 		}
 		index += 1
 	}

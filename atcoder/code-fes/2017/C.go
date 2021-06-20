@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"math"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
-	"fmt"
 )
 
 var sc = bufio.NewScanner(os.Stdin)
@@ -23,7 +23,7 @@ func geti() int {
 }
 
 // 10 11 12 => [10, 11, 12]
-func getli(size int) ([]int) {
+func getli(size int) []int {
 	a := make([]int, size)
 	list := strings.Split(read(), " ")
 	for i, s := range list {
@@ -33,7 +33,7 @@ func getli(size int) ([]int) {
 	return a
 }
 
-func get2byte(size int) ([][]byte) {
+func get2byte(size int) [][]byte {
 	a := make([][]byte, size)
 	for i := 0; i < size; i++ {
 		var low string
@@ -80,7 +80,7 @@ func solve(ds []int) int {
 	sort.Ints(ds)
 
 	for i, d := range ds {
-		if i % 2 == 0 {
+		if i%2 == 0 {
 			if res[d] {
 				return 0
 			}

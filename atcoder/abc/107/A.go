@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
-	"fmt"
 )
 
 var sc = bufio.NewScanner(os.Stdin)
@@ -20,7 +20,7 @@ func Geti() int {
 	return n
 }
 
-func Getli(size int) ([]int) {
+func Getli(size int) []int {
 	a := make([]int, size)
 	list := strings.Split(read(), " ")
 	for i, s := range list {
@@ -32,5 +32,5 @@ func Getli(size int) ([]int) {
 
 func main() {
 	n := Getli(2)
-	fmt.Println(n[0]-n[1]+1)
+	fmt.Println(n[0] - n[1] + 1)
 }

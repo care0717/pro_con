@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
-	"fmt"
 )
 
 var sc = bufio.NewScanner(os.Stdin)
@@ -21,7 +21,7 @@ func geti() int {
 }
 
 // 10 11 12 => [10, 11, 12]
-func getli(size int) ([]int) {
+func getli(size int) []int {
 	a := make([]int, size)
 	list := strings.Split(read(), " ")
 	for i, s := range list {
@@ -31,7 +31,7 @@ func getli(size int) ([]int) {
 	return a
 }
 
-func get2byte(size int) ([][]byte) {
+func get2byte(size int) [][]byte {
 	a := make([][]byte, size)
 	for i := 0; i < size; i++ {
 		var low string
@@ -41,14 +41,14 @@ func get2byte(size int) ([][]byte) {
 	return a
 }
 
-func transpose(a [][]byte) ([][]byte) {
+func transpose(a [][]byte) [][]byte {
 	n := len(a)
 	w := len(a[0])
 
 	var res [][]byte
 	for j := 0; j < w; j++ {
 		temp := make([]byte, n)
-		for i := 0 ; i < n; i++ {
+		for i := 0; i < n; i++ {
 			temp[i] = a[i][j]
 		}
 		res = append(res, temp)
@@ -56,7 +56,7 @@ func transpose(a [][]byte) ([][]byte) {
 	return res
 }
 
-func uniq(a []byte) ([]byte){
+func uniq(a []byte) []byte {
 	m := make(map[byte]bool)
 	var uniq []byte
 
@@ -76,9 +76,9 @@ func main() {
 	W := hs[1]
 	a := get2byte(H)
 	var temp, res [][]byte
-	for i:=0; i<H; i++ {
-		fmt.Println(!(len(uniq(a[i]))==1 && uniq(a[i])[0]=='.'))
-		if !(len(uniq(a[i]))==1 && uniq(a[i])[0]=='.') {
+	for i := 0; i < H; i++ {
+		fmt.Println(!(len(uniq(a[i])) == 1 && uniq(a[i])[0] == '.'))
+		if !(len(uniq(a[i])) == 1 && uniq(a[i])[0] == '.') {
 			temp = append(temp, a[i])
 		}
 	}
@@ -87,8 +87,8 @@ func main() {
 	fmt.Println(temp)
 	fmt.Println(W)
 
-	for i:=0; i<W; i++ {
-		if !(len(uniq(temp[i]))==1 && uniq(temp[i])[0]=='.') {
+	for i := 0; i < W; i++ {
+		if !(len(uniq(temp[i])) == 1 && uniq(temp[i])[0] == '.') {
 			res = append(res, temp[i])
 		}
 	}
@@ -96,8 +96,8 @@ func main() {
 
 	w := len(res)
 	res = transpose(res)
-	for i:=0; i<h; i++ {
-		for j:=0; j<w; j++ {
+	for i := 0; i < h; i++ {
+		for j := 0; j < w; j++ {
 			fmt.Print(string(res[i][j]))
 		}
 		fmt.Println()

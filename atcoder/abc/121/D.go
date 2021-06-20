@@ -22,7 +22,7 @@ func geti() int {
 }
 
 // 10 11 12 => [10, 11, 12]
-func getli(size int) ([]int64) {
+func getli(size int) []int64 {
 	a := make([]int64, size)
 	list := strings.Split(read(), " ")
 	for i, s := range list {
@@ -32,7 +32,7 @@ func getli(size int) ([]int64) {
 	return a
 }
 
-func get2byte(size int) ([][]byte) {
+func get2byte(size int) [][]byte {
 	a := make([][]byte, size)
 	for i := 0; i < size; i++ {
 		var low string
@@ -70,14 +70,14 @@ func main() {
 }
 
 func solve(a, b int64) int64 {
-	if a % 2 == 0 && b % 2 == 0 {
-		return b ^ (((b-a)/2)% 2)
-	} else if  a % 2 == 0 && b % 2 == 1 {
-		return ((b-a+1)/2)% 2
-	} else if a % 2 == 1 && b % 2 == 0 {
-		return a ^ b ^ (((b-a-1)/2)% 2)
+	if a%2 == 0 && b%2 == 0 {
+		return b ^ (((b - a) / 2) % 2)
+	} else if a%2 == 0 && b%2 == 1 {
+		return ((b - a + 1) / 2) % 2
+	} else if a%2 == 1 && b%2 == 0 {
+		return a ^ b ^ (((b - a - 1) / 2) % 2)
 	} else {
-		return a ^ (((b-a)/2)% 2)
+		return a ^ (((b - a) / 2) % 2)
 	}
 
 }
