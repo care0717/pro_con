@@ -336,6 +336,15 @@ func (u *UnionFind) Unite(x, y int) {
 func (u *UnionFind) Size(x int) int {
 	return u.size[u.Root(x)]
 }
+func (u *UnionFind) Roots() []int {
+	var roots []int
+	for i := 0; i < len(u.parent); i++ {
+		if u.Root(i) == i {
+			roots = append(roots, i)
+		}
+	}
+	return roots
+}
 
 type Deque interface {
 	Push(x int)
