@@ -17,8 +17,8 @@ func main() {
 	as := readIntSlice(n)
 	as = append(as, l)
 	left := 0
-	right := l+1
-	for left + 1 < right {
+	right := l + 1
+	for left+1 < right {
 		mid := (left + right) / 2
 		if canDivide(as, k, mid) {
 			left = mid
@@ -44,7 +44,7 @@ func canDivide(as []int, k int, score int) bool {
 	if current < score {
 		concatCount++
 	}
-	return  k <= n-1-concatCount
+	return k <= n-1-concatCount
 }
 
 var (

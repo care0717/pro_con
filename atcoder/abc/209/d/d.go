@@ -17,7 +17,7 @@ func main() {
 	for i := 0; i < n; i++ {
 		edges[i] = make([]int, 0)
 	}
-	for i:=0; i<n-1; i++ {
+	for i := 0; i < n-1; i++ {
 		a, b := readInt()-1, readInt()-1
 		edges[a] = append(edges[a], b)
 		edges[b] = append(edges[b], a)
@@ -44,7 +44,7 @@ func main() {
 			pq.Push(SimpleItem{N: node})
 		}
 	}
-	for i := 0; i<q; i++ {
+	for i := 0; i < q; i++ {
 		c, d := readInt()-1, readInt()-1
 		if colors[c] == colors[d] {
 			fmt.Println("Town")

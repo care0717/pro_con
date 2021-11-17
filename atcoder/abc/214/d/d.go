@@ -21,8 +21,8 @@ func main() {
 	nodes := make([]node, n-1)
 	for i := 0; i < n-1; i++ {
 		nodes[i] = node{
-			u: readInt()-1,
-			v: readInt()-1,
+			u: readInt() - 1,
+			v: readInt() - 1,
 			w: readInt(),
 		}
 	}
@@ -33,7 +33,7 @@ func main() {
 	uf := NewUnionFind(n)
 	var sum int
 	for _, nod := range nodes {
-		sum += (uf.Size(nod.v)*uf.Size(nod.u))*nod.w
+		sum += (uf.Size(nod.v) * uf.Size(nod.u)) * nod.w
 		uf.Unite(nod.v, nod.u)
 	}
 	fmt.Println(sum)
