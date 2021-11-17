@@ -13,7 +13,54 @@ import (
 )
 
 func main() {
+	n := readInt()
+	pq := NewPriorityQueue(nil)
+	for i := 0; i < n; i++ {
+		a, b := readInt(), readInt()
+		pq.Push(RangeItem{
+			n:       a,
+			isStart: true,
+		})
+		pq.Push(RangeItem{
+			n:       a + b,
+			isStart: false,
+		})
+	}
+	var peopleNum, before int
+	counts := make([]int, n+1)
+	for pq.IsNotEmpty() {
+		item, _ := pq.Pop()
+		r := item.(RangeItem)
+		counts[peopleNum] += r.n - before
+		if r.isStart {
+			peopleNum++
+		} else {
+			peopleNum--
+		}
+		before = r.n
+	}
+	res := make([]string, n)
+	for i := 0; i < n; i++ {
+		res[i] = strconv.Itoa(counts[i+1])
+	}
+	fmt.Println(strings.Join(res, " "))
+}
 
+type RangeItem struct {
+	n       int
+	isStart bool
+}
+
+func (r RangeItem) Priority() int {
+	return r.n
+}
+
+func (r RangeItem) Cost() int {
+	return r.n
+}
+
+func (r RangeItem) Node() int {
+	return r.n
 }
 
 var (
@@ -61,14 +108,6 @@ func readIntSlice(size int) []int {
 		a[i] = readInt()
 	}
 	return a
-}
-
-func join(xs []int) string {
-	res := make([]string, len(xs))
-	for i, x := range xs {
-		res[i] = strconv.Itoa(x)
-	}
-	return strings.Join(res, " ")
 }
 
 func get2byte(size int) [][]byte {
