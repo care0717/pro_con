@@ -2,10 +2,12 @@ package main
 
 import (
 	"github.com/google/go-cmp/cmp"
+	"math/rand"
 	"testing"
 )
 
 func TestPrimeFactorize(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		n    int
@@ -46,6 +48,7 @@ func TestPrimeFactorize(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := primeFactorize(tt.n); !cmp.Equal(got, tt.want) {
 				t.Errorf("primeFactorize(%d) = %v, want %v", tt.n, got, tt.want)
 			}
@@ -54,6 +57,7 @@ func TestPrimeFactorize(t *testing.T) {
 }
 
 func TestDivisor(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		n    int
@@ -87,6 +91,7 @@ func TestDivisor(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := divisor(tt.n); !cmp.Equal(got, tt.want) {
 				t.Errorf("primeFactorize(%d) = %v, want %v", tt.n, got, tt.want)
 			}
@@ -95,6 +100,7 @@ func TestDivisor(t *testing.T) {
 }
 
 func TestUnionFind(t *testing.T) {
+	t.Parallel()
 	type pair struct {
 		x, y int
 	}
@@ -122,6 +128,7 @@ func TestUnionFind(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			u := NewUnionFind(tt.size)
 			for _, p := range tt.unites {
 				u.Unite(p.x, p.y)
@@ -141,7 +148,7 @@ func TestUnionFind(t *testing.T) {
 }
 
 func TestPriorityQueue(t *testing.T) {
-
+	t.Parallel()
 	tests := []struct {
 		name      string
 		items     []Item
@@ -203,6 +210,7 @@ func TestPriorityQueue(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			pq := NewPriorityQueue(tt.items)
 			for _, i := range tt.pushItems {
 				pq.Push(i)
@@ -217,5 +225,202 @@ func TestPriorityQueue(t *testing.T) {
 				t.Errorf("pq is not empty")
 			}
 		})
+	}
+}
+
+func TestAvlTree_EmptyTree(t *testing.T) {
+	t.Parallel()
+	at := NewAvlTree()
+
+	shouldFalse := at.Search(10)
+	if shouldFalse {
+		t.Errorf("at.Search = %v, want false", shouldFalse)
+	}
+
+	_, shouldFalse = at.LowerBound(10)
+	if shouldFalse {
+		t.Errorf("at.LowerBound = %v, want false", shouldFalse)
+	}
+
+	_, shouldFalse = at.UpperBound(10)
+	if shouldFalse {
+		t.Errorf("at.UpperBound = %v, want false", shouldFalse)
+	}
+
+	_, shouldFalse = <-at.Iter()
+	if shouldFalse {
+		t.Errorf("at.Iter = %v, want false", shouldFalse)
+	}
+}
+
+func TestAvlTree_Search(t *testing.T) {
+	t.Parallel()
+	at := NewAvlTree()
+	at.Insert(4)
+	tests := []struct {
+		name   string
+		input  int
+		expect bool
+	}{
+		{
+			name:   "is exists",
+			input:  4,
+			expect: true,
+		},
+		{
+			name:   "not exists",
+			input:  100,
+			expect: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := at.Search(tt.input)
+			if got != tt.expect {
+				t.Errorf("at.Search = %v, want %v", got, true)
+			}
+		})
+	}
+}
+
+func TestAvlTree_LowerBound(t *testing.T) {
+	t.Parallel()
+	at := NewAvlTree()
+	at.Insert(5)
+	at.Insert(10)
+	at.Insert(15)
+	tests := []struct {
+		name   string
+		input  int
+		ok     bool
+		expect int
+	}{
+		{
+			name:  "no lower",
+			input: -1,
+			ok:    false,
+		},
+		{
+			name:   "equal elm",
+			input:  5,
+			ok:     true,
+			expect: 5,
+		},
+		{
+			name:   "has lower1",
+			input:  7,
+			ok:     true,
+			expect: 5,
+		},
+		{
+			name:   "has lower2",
+			input:  11,
+			ok:     true,
+			expect: 10,
+		},
+		{
+			name:   "over max elm",
+			input:  100,
+			ok:     true,
+			expect: 15,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := at.LowerBound(tt.input)
+			if ok != tt.ok {
+				t.Errorf("at.LowerBound ok = %v, want %v", ok, tt.ok)
+			}
+			if !ok {
+				return
+			}
+			if got != tt.expect {
+				t.Errorf("at.LowerBound = %v, want %v", got, tt.expect)
+			}
+		})
+	}
+}
+
+func TestAvlTree_UpperBound(t *testing.T) {
+	t.Parallel()
+	at := NewAvlTree()
+	at.Insert(5)
+	at.Insert(10)
+	at.Insert(15)
+	tests := []struct {
+		name   string
+		input  int
+		ok     bool
+		expect int
+	}{
+		{
+			name:   "under min elm",
+			input:  -1,
+			ok:     true,
+			expect: 5,
+		},
+		{
+			name:   "equal elm",
+			input:  5,
+			ok:     true,
+			expect: 5,
+		},
+		{
+			name:   "has upper1",
+			input:  7,
+			ok:     true,
+			expect: 10,
+		},
+		{
+			name:   "has upper2",
+			input:  11,
+			ok:     true,
+			expect: 15,
+		},
+		{
+			name:  "no upper",
+			input: 100,
+			ok:    false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := at.UpperBound(tt.input)
+			if ok != tt.ok {
+				t.Errorf("at.UpperBound ok = %v, want %v", ok, tt.ok)
+			}
+			if !ok {
+				return
+			}
+			if got != tt.expect {
+				t.Errorf("at.UpperBound = %v, want %v", got, tt.expect)
+			}
+		})
+	}
+}
+
+func TestAvlTree_Iter(t *testing.T) {
+	t.Parallel()
+	inputLen := 100
+	inputs := make([]int, inputLen)
+	for i := 0; i < inputLen; i++ {
+		inputs[i] = i
+	}
+	rand.Shuffle(len(inputs), func(i, j int) { inputs[i], inputs[j] = inputs[j], inputs[i] })
+
+	at := NewAvlTree()
+	for _, i := range inputs {
+		at.Insert(i)
+	}
+	c := at.Iter()
+	var expect int
+	for got := range c {
+		if got != expect {
+			t.Errorf("at.Iter() = %v, want %v", got, expect)
+		}
+		expect++
 	}
 }

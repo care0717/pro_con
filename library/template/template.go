@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -581,4 +582,212 @@ func dijkstra(n int, edges []map[int]int, start int) []int {
 	}
 
 	return costs
+}
+
+type AvlTree struct {
+	root *avlNode
+}
+
+func NewAvlTree() AvlTree {
+	return AvlTree{}
+}
+
+func (t *AvlTree) Insert(v int) {
+	if t.root == nil {
+		t.root = &avlNode{Value: v, Height: 1}
+		return
+	}
+	t.root.insert(v)
+}
+
+func (t AvlTree) Search(v int) bool {
+	if t.root == nil {
+		return false
+	}
+	return t.root.search(v)
+}
+
+func (t AvlTree) LowerBound(v int) (int, bool) {
+	if t.root == nil {
+		return 0, false
+	}
+	return t.root.lowerBound(v, 0, false)
+}
+
+func (t AvlTree) UpperBound(v int) (int, bool) {
+	if t.root == nil {
+		return 0, false
+	}
+	return t.root.upperBound(v, 0, false)
+}
+
+func (t AvlTree) Iter() <-chan int {
+	ch := make(chan int)
+	if t.root == nil {
+		close(ch)
+		return ch
+	}
+	go func() {
+		t.root.iter(ch)
+		close(ch)
+	}()
+	return ch
+}
+
+func (t AvlTree) String() string {
+	if t.root == nil {
+		return "null"
+	}
+	return t.root.string()
+}
+
+type avlNode struct {
+	Height int      `json:"height"`
+	Left   *avlNode `json:"left,omitempty"`
+	Value  int      `json:"value"`
+	Right  *avlNode `json:"right,omitempty"`
+}
+
+func (n avlNode) string() string {
+	b, _ := json.Marshal(n)
+	return string(b)
+}
+
+func (n avlNode) iter(ch chan<- int) {
+	if n.Left != nil {
+		n.Left.iter(ch)
+	}
+	ch <- n.Value
+	if n.Right != nil {
+		n.Right.iter(ch)
+	}
+}
+
+func (n avlNode) search(v int) bool {
+	if n.Value == v {
+		return true
+	} else if n.Value < v {
+		if n.Right == nil {
+			return false
+		} else {
+			return n.Right.search(v)
+		}
+	} else {
+		if n.Left == nil {
+			return false
+		} else {
+			return n.Left.search(v)
+		}
+	}
+}
+
+func (n avlNode) lowerBound(v, lower int, isLower bool) (int, bool) {
+	if n.Value == v {
+		return v, true
+	} else if n.Value < v {
+		if n.Right == nil {
+			return n.Value, true
+		}
+		return n.Right.lowerBound(v, n.Value, true)
+	} else {
+		if n.Left == nil {
+			return lower, isLower
+		}
+		return n.Left.lowerBound(v, lower, isLower)
+	}
+}
+
+func (n avlNode) upperBound(v, upper int, isUpper bool) (int, bool) {
+	if n.Value == v {
+		return v, true
+	} else if n.Value < v {
+		if n.Right == nil {
+			return upper, isUpper
+		}
+		return n.Right.upperBound(v, upper, isUpper)
+	} else {
+		if n.Left == nil {
+			return n.Value, true
+		}
+		return n.Left.upperBound(v, n.Value, true)
+	}
+}
+
+func (n avlNode) leftHeight() int {
+	if n.Left == nil {
+		return 0
+	}
+	return n.Left.Height
+}
+
+func (n avlNode) rightHeight() int {
+	if n.Right == nil {
+		return 0
+	}
+	return n.Right.Height
+}
+
+func (n avlNode) bias() int {
+	return n.leftHeight() - n.rightHeight()
+}
+
+// rightは存在している前提で呼び出す
+func (n *avlNode) rotateL() {
+	newNode := avlNode{Value: n.Right.Value, Right: n.Right.Right}
+	left := &avlNode{Value: n.Value, Left: n.Left, Right: n.Right.Left}
+	left.updateHeight()
+	newNode.Left = left
+	newNode.updateHeight()
+	*n = newNode
+}
+
+// leftは存在している前提で呼び出す
+func (n *avlNode) rotateR() {
+	newNode := avlNode{Value: n.Left.Value, Left: n.Left.Left}
+	right := &avlNode{Value: n.Value, Right: n.Right, Left: n.Left.Right}
+	right.updateHeight()
+	newNode.Right = right
+	newNode.updateHeight()
+	*n = newNode
+}
+
+func (n *avlNode) updateHeight() {
+	n.Height = 1 + max(n.leftHeight(), n.rightHeight())
+}
+
+func (n *avlNode) insert(v int) {
+	if n.Value < v {
+		if n.Right == nil {
+			n.Right = &avlNode{Value: v, Height: 1}
+		} else {
+			n.Right.insert(v)
+		}
+	} else {
+		if n.Left == nil {
+			n.Left = &avlNode{Value: v, Height: 1}
+		} else {
+			n.Left.insert(v)
+		}
+	}
+	n.balance()
+}
+
+func (n *avlNode) balance() {
+	bias := n.bias()
+	if bias < -1 {
+		// biasが負なら必ずrightは存在する
+		if n.Right.bias() > 0 {
+			// rightのbiasが正なので、rightのleftが存在するのでrotateRが呼び出せる
+			n.Right.rotateR()
+		}
+		n.rotateL()
+	} else if bias > 1 {
+		// 逆も同じ
+		if n.Left.bias() < 0 {
+			n.Left.rotateL()
+		}
+		n.rotateR()
+	} else {
+		n.updateHeight()
+	}
 }
