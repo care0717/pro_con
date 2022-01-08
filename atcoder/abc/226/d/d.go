@@ -14,7 +14,28 @@ import (
 )
 
 func main() {
-
+	n := readInt()
+	xs, ys := make([]int, n), make([]int, n)
+	for i := 0; i < n; i++ {
+		xs[i], ys[i] = readInt(), readInt()
+	}
+	type vec struct {
+		dx, dy int
+	}
+	m := make(map[vec]struct{})
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
+			if i == j {
+				continue
+			}
+			dx, dy := xs[j]-xs[i], ys[j]-ys[i]
+			gcd := calcGcd(dx, dy)
+			dx /= gcd
+			dy /= gcd
+			m[vec{dx, dy}] = struct{}{}
+		}
+	}
+	fmt.Println(len(m))
 }
 
 var (

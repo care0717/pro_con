@@ -6,6 +6,70 @@ import (
 	"testing"
 )
 
+func TestCalcGcd(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		as   []int
+		want int
+	}{
+		{
+			name: "normal",
+			as:   []int{18, 24, 33},
+			want: 3,
+		},
+		{
+			name: "single",
+			as:   []int{13},
+			want: 13,
+		},
+		{
+			name: "max1",
+			as:   []int{11, 22},
+			want: 11,
+		},
+		{
+			name: "max2",
+			as:   []int{42, 84},
+			want: 42,
+		},
+		{
+			name: "prime",
+			as:   []int{13, 53},
+			want: 1,
+		},
+		{
+			name: "minus, plus",
+			as:   []int{-10, 15},
+			want: 5,
+		},
+		{
+			name: "plus, minus",
+			as:   []int{14, -7},
+			want: 7,
+		},
+		{
+			name: "minus, minus",
+			as:   []int{-4, -6},
+			want: 2,
+		},
+		{
+			name: "zero",
+			as:   []int{0, 2},
+			want: 2,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := calcGcd(tt.as...); !cmp.Equal(got, tt.want) {
+				t.Errorf("calcGcd(%d) = %v, want %v", tt.as, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPrimeFactorize(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -47,6 +111,7 @@ func TestPrimeFactorize(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := primeFactorize(tt.n); !cmp.Equal(got, tt.want) {
@@ -90,6 +155,7 @@ func TestDivisor(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := divisor(tt.n); !cmp.Equal(got, tt.want) {
@@ -127,6 +193,7 @@ func TestUnionFind(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			u := NewUnionFind(tt.size)
@@ -209,6 +276,7 @@ func TestPriorityQueue(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			pq := NewPriorityQueue(tt.items)
@@ -274,6 +342,7 @@ func TestAvlTree_Search(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := at.Search(tt.input)
@@ -327,6 +396,7 @@ func TestAvlTree_LowerBound(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, ok := at.LowerBound(tt.input)
@@ -386,6 +456,7 @@ func TestAvlTree_UpperBound(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, ok := at.UpperBound(tt.input)
