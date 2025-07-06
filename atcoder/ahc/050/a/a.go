@@ -26,7 +26,7 @@ func main() {
 		for i := 0; i < N; i++ {
 			grid[i] = ReadString()
 		}
-		for _, cell := range Solve1(N, grid) {
+		for _, cell := range Solve3(N, grid) {
 			fmt.Printf("%d %d\n", cell[0], cell[1])
 		}
 		return
@@ -64,7 +64,7 @@ func main() {
 		startTime := time.Now()
 
 		// solve関数を呼び出して解を取得
-		solution := Solve1(testCase.N, testCase.Grid)
+		solution := Solve3(testCase.N, testCase.Grid)
 
 		elapsed := time.Since(startTime)
 
@@ -152,18 +152,35 @@ func Solve1(N int, grid []string) [][]int {
 		}
 	}
 
-	return getBestGreedyOrder(grid, emptyCells, N)
+	return getBestGreedyOrder(grid, emptyCells, N, getGreedyOrder)
 }
 
-func getBestGreedyOrder(grid []string, emptyCells map[int]int, N int) [][]int {
+// 確率が10^-6以下、かつ周りに岩の少ないセルを優先するgreedyな戦略
+func Solve3(N int, grid []string) [][]int {
+	rand.Seed(time.Now().UnixNano())
+
+	emptyCells := make(map[int]int)
+	for i := 0; i < N; i++ {
+		for j := 0; j < N; j++ {
+			if grid[i][j] == '.' {
+				emptyCells[toIndex(i, j, N)] = 1
+			}
+		}
+	}
+
+	return getBestGreedyOrder(grid, emptyCells, N, getAdvancedGreedyOrder)
+}
+
+func getBestGreedyOrder(grid []string, emptyCells map[int]int, N int, greedy func(grid []string, emptyCells map[int]int, N int) [][]int) [][]int {
 	timeLimit := 1500 * time.Millisecond // 1.8秒
-	bestOrder := getGreedyOrder(grid, emptyCells, N)
+	bestOrder := greedy(grid, emptyCells, N)
 	bestScore := CalculateScore(grid, bestOrder, N)
 	for time.Since(StartTime) < timeLimit {
-		order := getGreedyOrder(grid, emptyCells, N)
+		order := greedy(grid, emptyCells, N)
 		orderScore := CalculateScore(grid, order, N)
 		if orderScore > bestScore {
 			bestOrder = order
+			bestScore = orderScore
 		}
 	}
 	return bestOrder
@@ -209,6 +226,87 @@ func getGreedyOrder(grid []string, emptyCells map[int]int, N int) [][]int {
 	}
 
 	return result
+}
+
+func getAdvancedGreedyOrder(grid []string, emptyCells map[int]int, N int) [][]int {
+	// 現在のグリッド状態をコピー
+	currentGrid := make([][]byte, N)
+	for i := 0; i < N; i++ {
+		currentGrid[i] = []byte(grid[i])
+	}
+	emptyCount := len(emptyCells)
+	prob := make(map[int]float64, N)
+	for i := 0; i < N; i++ {
+		for j := 0; j < N; j++ {
+			if currentGrid[i][j] == '.' {
+				prob[toIndex(i, j, N)] = 1.0 / float64(emptyCount)
+			}
+		}
+	}
+
+	var result [][]int
+	for len(prob) > 0 {
+		nextProb := calculateNextProb(currentGrid, prob, N)
+
+		// 確率が10^-6以下のセルを最優先で選ぶ
+		lowProbCells := make([]int, 0)
+		for idx, p := range nextProb {
+			if p <= 1e-6 {
+				lowProbCells = append(lowProbCells, idx)
+			}
+		}
+
+		var selectedIndex int
+		if len(lowProbCells) > 0 {
+			// 確率が10^-6以下のセルの中から、周りに岩が最も少ないものを選ぶ
+			minRocks := math.MaxInt32
+			for _, idx := range lowProbCells {
+				i, j := fromIndex(idx, N)
+				rockCount := countSurroundingRocks(currentGrid, i, j, N)
+				if rockCount < minRocks {
+					minRocks = rockCount
+					selectedIndex = idx
+				}
+			}
+		} else {
+			// 確率が10^-6以下のセルがない場合は、従来通り最小確率を選ぶ
+			minProb := 10000.0
+			for idx, p := range nextProb {
+				if p == 0 {
+					minProb = p
+					selectedIndex = idx
+					break
+				}
+				if p < minProb {
+					minProb = p
+					selectedIndex = idx
+				}
+			}
+		}
+
+		i, j := fromIndex(selectedIndex, N)
+		result = append(result, []int{i, j})
+		currentGrid[i][j] = '#'
+		delete(nextProb, selectedIndex)
+		prob = nextProb
+	}
+
+	return result
+}
+
+func countSurroundingRocks(grid [][]byte, i, j, N int) int {
+	count := 0
+	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+	for _, dir := range directions {
+		ni, nj := i+dir[0], j+dir[1]
+		if ni >= 0 && ni < N && nj >= 0 && nj < N && grid[ni][nj] == '#' {
+			count++
+		} else if ni < 0 || ni >= N || nj < 0 || nj >= N {
+			// 境界外も岩とみなす
+			count++
+		}
+	}
+	return count
 }
 
 func simulatedAnnealing(grid []string, order [][]int, N int) [][]int {
