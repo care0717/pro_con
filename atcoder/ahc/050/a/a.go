@@ -2,35 +2,14 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"math"
 	"math/rand"
 	"os"
-	"sort"
 	"strconv"
 	"time"
 )
-
-func solve(N int, grid []string) [][]int {
-	startTime := time.Now()
-	rand.Seed(time.Now().UnixNano())
-
-	var emptyCells [][]int
-	for i := 0; i < N; i++ {
-		for j := 0; j < N; j++ {
-			if grid[i][j] == '.' {
-				emptyCells = append(emptyCells, []int{i, j})
-			}
-		}
-	}
-	// 初期解をヒューリスティックで生成
-	initialOrder := getInitialOrder(grid, emptyCells, N)
-
-	// 焼きなましで最適化（1.8秒制限）
-	return simulatedAnnealing(startTime, grid, initialOrder, N)
-}
 
 func main() {
 	N := readInt()
@@ -40,25 +19,89 @@ func main() {
 	for i := 0; i < N; i++ {
 		grid[i] = ReadString()
 	}
-	for _, cell := range solve(N, grid) {
+	for _, cell := range Solve2(N, grid) {
 		fmt.Printf("%d %d\n", cell[0], cell[1])
 	}
 }
 
-func getInitialOrder(grid []string, emptyCells [][]int, N int) [][]int {
+var (
+	// ReadString returns a WORD string.
+	ReadString func() string
+	MOD        = 1000000007
+	INF        = 9223372036854775807
+)
+
+func init() {
+	ReadString = newReadString(os.Stdin, bufio.ScanWords)
+}
+
+func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
+	r := bufio.NewScanner(ior)
+	r.Buffer(make([]byte, 1024), int(1e+9)) // for Codeforces
+	r.Split(sf)
+
+	return func() string {
+		if !r.Scan() {
+			panic("Scan failed")
+		}
+		return r.Text()
+	}
+}
+
+func readInt64() int64 {
+	n, _ := strconv.ParseInt(ReadString(), 10, 64)
+	return n
+}
+
+func readInt() int {
+	return int(readInt64())
+}
+
+func Solve2(N int, grid []string) [][]int {
+	startTime := time.Now()
+	rand.Seed(time.Now().UnixNano())
+
+	emptyCells := make(map[int]int)
+	for i := 0; i < N; i++ {
+		for j := 0; j < N; j++ {
+			if grid[i][j] == '.' {
+				emptyCells[toIndex(i, j, N)] = 1
+			}
+		}
+	}
+	// 初期解をヒューリスティックで生成
+	initialOrder := getInitialOrder(grid, emptyCells, N)
+
+	// 焼きなましで最適化（1.8秒制限）
+	return simulatedAnnealing(startTime, grid, initialOrder, N)
+	//return initialOrder
+}
+
+func Solve1(N int, grid []string) [][]int {
+	rand.Seed(time.Now().UnixNano())
+
+	emptyCells := make(map[int]int)
+	for i := 0; i < N; i++ {
+		for j := 0; j < N; j++ {
+			if grid[i][j] == '.' {
+				emptyCells[toIndex(i, j, N)] = 1
+			}
+		}
+	}
+	// 初期解をヒューリスティックで生成
+	initialOrder := getInitialOrder(grid, emptyCells, N)
+
+	// 焼きなましで最適化（1.8秒制限）
+	//return simulatedAnnealing(startTime, grid, initialOrder, N)
+	return initialOrder
+}
+
+func getInitialOrder(grid []string, emptyCells map[int]int, N int) [][]int {
 	// 動的優先度キューベースの追い込み漁戦略
 	return getGreedyInitialOrder(grid, emptyCells, N)
 }
 
-func getGreedyInitialOrder(grid []string, emptyCells [][]int, N int) [][]int {
-	type CellWithProb struct {
-		pos  []int
-		prob float64
-	}
-
-	// 各空きセルに到達する確率を計算
-	var cellProbs []CellWithProb
-
+func getGreedyInitialOrder(grid []string, emptyCells map[int]int, N int) [][]int {
 	// 現在のグリッド状態をコピー
 	currentGrid := make([][]byte, N)
 	for i := 0; i < N; i++ {
@@ -74,68 +117,30 @@ func getGreedyInitialOrder(grid []string, emptyCells [][]int, N int) [][]int {
 		}
 	}
 	// 各空きセルに対してロボットが到達する確率を簡易計算
-	nextProb := calculateNextProb(currentGrid, prob, N)
-	for _, cell := range emptyCells {
-		cellProbs = append(cellProbs, CellWithProb{[]int{cell[0], cell[1]}, nextProb[toIndex(cell[0], cell[1], N)]})
-	}
-
-	// 確率の低い順（先に埋める順）にソート
-	sort.Slice(cellProbs, func(i, j int) bool {
-		return cellProbs[i].prob < cellProbs[j].prob
-	})
-
 	var result [][]int
-	for _, p := range cellProbs {
-		result = append(result, p.pos)
+	for len(prob) > 0 {
+		nextProb := calculateNextProb(currentGrid, prob, N)
+		minProb := 10000.0
+		var minIndex int
+		for idx, p := range nextProb {
+			if p == 0 {
+				minProb = p
+				minIndex = idx
+				break
+			}
+			if p < minProb {
+				minProb = p
+				minIndex = idx
+			}
+		}
+		i, j := fromIndex(minIndex, N)
+		result = append(result, []int{i, j})
+		currentGrid[i][j] = '#'
+		delete(nextProb, minIndex)
+		prob = nextProb
 	}
 
 	return result
-}
-
-func calculateReachabilityScore(grid [][]byte, targetRow, targetCol, N int) float64 {
-	// 各位置からターゲットに到達できる確率を計算
-	score := 0.0
-	emptyCount := 0
-
-	// 全ての空きマスから計算
-	for i := 0; i < N; i++ {
-		for j := 0; j < N; j++ {
-			if grid[i][j] == '.' {
-				emptyCount++
-
-				// この位置から4方向に移動してターゲットに到達できるかチェック
-				directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
-				reachCount := 0
-
-				for _, dir := range directions {
-					// この方向に移動してどこに到達するか
-					i2, j2 := i, j
-					for {
-						ni, nj := i2+dir[0], j2+dir[1]
-						if ni < 0 || ni >= N || nj < 0 || nj >= N || grid[ni][nj] == '#' {
-							break
-						}
-						i2, j2 = ni, nj
-					}
-
-					// ターゲット位置に到達した場合
-					if i2 == targetRow && j2 == targetCol {
-						reachCount++
-					}
-				}
-
-				// この位置からターゲットに到達する確率を加算
-				score += float64(reachCount) / 4.0
-			}
-		}
-	}
-
-	if emptyCount == 0 {
-		return 0.0
-	}
-
-	// 全体の確率を正規化
-	return score / float64(emptyCount)
 }
 
 func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int) [][]int {
@@ -147,7 +152,7 @@ func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int
 	best := make([][]int, len(order))
 	copy(best, order)
 
-	currentScore := calculateScore(grid, current, N)
+	currentScore := CalculateScore(grid, current, N)
 	bestScore := currentScore
 
 	// 焼きなましパラメータ
@@ -199,7 +204,7 @@ func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int
 			}
 		}
 
-		neighborScore := calculateScore(grid, neighbor, N)
+		neighborScore := CalculateScore(grid, neighbor, N)
 		scoreCalculations++
 
 		// 受諾判定
@@ -217,7 +222,7 @@ func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int
 
 		iter++
 	}
-
+	fmt.Println(iter)
 	return best
 }
 
@@ -228,7 +233,7 @@ func toIndex(i, j, N int) int {
 func fromIndex(idx, N int) (int, int) {
 	return idx / N, idx % N
 }
-func calculateScore(grid []string, order [][]int, N int) float64 {
+func CalculateScore(grid []string, order [][]int, N int) float64 {
 
 	// 現在のグリッド状態をコピー
 	currentGrid := make([][]byte, N)
@@ -313,85 +318,6 @@ func calculateNextProb(grid [][]byte, prob map[int]float64, N int) map[int]float
 	return nextProb
 }
 
-func estimateSurvivalProbability(grid [][]byte, rockRow, rockCol, N int) float64 {
-	// 簡易的な生存確率推定
-	// 岩を置いた場合に、ロボットがその位置に到達する確率の逆数
-
-	// 周辺の空きスペースの数を数える
-	emptySpaces := 0
-	for i := 0; i < N; i++ {
-		for j := 0; j < N; j++ {
-			if grid[i][j] == '.' {
-				emptySpaces++
-			}
-		}
-	}
-
-	if emptySpaces == 0 {
-		return 0.0
-	}
-
-	// 単純な近似：周辺に岩が多いほど生存確率が高い
-	nearbyRocks := 0
-	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
-
-	for _, dir := range directions {
-		nr, nc := rockRow+dir[0], rockCol+dir[1]
-		if nr >= 0 && nr < N && nc >= 0 && nc < N && grid[nr][nc] == '#' {
-			nearbyRocks++
-		}
-	}
-
-	// 基本生存確率 + 周辺岩ボーナス
-	return 0.8 + float64(nearbyRocks)*0.05
-}
-
-func countNearbyRocks(grid []string, row, col, N int) int {
-	count := 0
-	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
-
-	for _, dir := range directions {
-		nr, nc := row+dir[0], col+dir[1]
-		if nr >= 0 && nr < N && nc >= 0 && nc < N && grid[nr][nc] == '#' {
-			count++
-		}
-	}
-	return count
-}
-
-var (
-	// ReadString returns a WORD string.
-	ReadString func() string
-	MOD        = 1000000007
-	INF        = 9223372036854775807
-)
-
-func init() {
-	ReadString = newReadString(os.Stdin, bufio.ScanWords)
-}
-
-func newReadString(ior io.Reader, sf bufio.SplitFunc) func() string {
-	r := bufio.NewScanner(ior)
-	r.Buffer(make([]byte, 1024), int(1e+9)) // for Codeforces
-	r.Split(sf)
-
-	return func() string {
-		if !r.Scan() {
-			panic("Scan failed")
-		}
-		return r.Text()
-	}
-}
-
-func readInt64() int64 {
-	n, _ := strconv.ParseInt(ReadString(), 10, 64)
-	return n
-}
-
-func readInt() int {
-	return int(readInt64())
-}
-
 func min(integers ...int) int {
 	m := integers[0]
 	for i, integer := range integers {
@@ -416,94 +342,4 @@ func max(integers ...int) int {
 		}
 	}
 	return m
-}
-
-type SimpleItem struct {
-	N int
-	C float64
-}
-
-func (i SimpleItem) Priority() float64 {
-	return float64(i.C)
-}
-func (i SimpleItem) Cost() float64 {
-	return i.C
-}
-func (i SimpleItem) Node() int {
-	return i.N
-}
-
-type Item interface {
-	Priority() float64
-}
-
-// Priorityの低いものが先に出てくる
-type PriorityQueue struct {
-	items []Item
-}
-
-func (pq *PriorityQueue) Push(item Item) {
-	index := len(pq.items)
-	for index > 0 {
-		parentIndex := (index - 1) / 2
-		if pq.items[parentIndex].Priority() <= item.Priority() {
-			break
-		}
-		if index == len(pq.items) {
-			pq.items = append(pq.items, pq.items[parentIndex])
-		} else {
-			pq.items[index] = pq.items[parentIndex]
-		}
-		index = parentIndex
-	}
-	if index == len(pq.items) {
-		pq.items = append(pq.items, item)
-	} else {
-		pq.items[index] = item
-	}
-}
-
-// priorityの低いものをpopする
-func (pq *PriorityQueue) Pop() (Item, error) {
-	n := len(pq.items)
-	if n == 0 {
-		return nil, errors.New("PriorityQueue is empty")
-	}
-	popItem := pq.items[0]
-	if n == 1 {
-		pq.items = pq.items[:n-1]
-		return popItem, nil
-	}
-	last := pq.items[n-1]
-	pq.items = pq.items[:n-1]
-	n -= 1
-	index := 0
-	for index*2+1 < n {
-		a := index*2 + 1
-		b := index*2 + 2
-		if b < n && pq.items[b].Priority() < pq.items[a].Priority() {
-			a = b
-		}
-		if pq.items[a].Priority() >= last.Priority() {
-			break
-		}
-		pq.items[index] = pq.items[a]
-		index = a
-	}
-	if index == n {
-		pq.items = append(pq.items, last)
-	} else {
-		pq.items[index] = last
-	}
-	return popItem, nil
-}
-func (pq PriorityQueue) IsNotEmpty() bool {
-	return len(pq.items) > 0
-}
-func NewPriorityQueue(items []Item) *PriorityQueue {
-	pq := &PriorityQueue{}
-	for _, i := range items {
-		pq.Push(i)
-	}
-	return pq
 }
