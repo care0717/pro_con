@@ -287,7 +287,6 @@ func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int
 
 		iter++
 	}
-	fmt.Println(iter)
 	return best
 }
 
