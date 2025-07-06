@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/google/go-cmp/cmp"
 	"math/rand"
 	"testing"
@@ -493,5 +494,36 @@ func TestAvlTree_Iter(t *testing.T) {
 			t.Errorf("at.Iter() = %v, want %v", got, expect)
 		}
 		expect++
+	}
+}
+
+func Test_sqrtIntWithFloor(t *testing.T) {
+	tests := []struct {
+		n    int
+		want int
+	}{
+		{
+			n:    1,
+			want: 1,
+		},
+		{
+			n:    4,
+			want: 2,
+		},
+		{
+			n:    101,
+			want: 10,
+		},
+		{
+			n:    99,
+			want: 9,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%d", tt.n), func(t *testing.T) {
+			if got := sqrtIntWithFloor(tt.n); got != tt.want {
+				t.Errorf("sqrtIntWithFloor() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
