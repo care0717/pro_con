@@ -14,8 +14,11 @@ import (
 	"time"
 )
 
+var StartTime time.Time
+
 func main() {
 	if len(os.Args) < 2 {
+		StartTime = time.Now()
 		N := readInt()
 		_ = readInt()
 
@@ -78,11 +81,8 @@ func main() {
 	}
 
 	if testCount > 0 {
-		avgScore := totalScore / float64(testCount)
-		avgTime := float64(totalTime.Nanoseconds()) / float64(testCount) / 1e6
 		fmt.Println("----\t\t-----\t----------\t--------")
-		fmt.Printf("Average\t\t\t%8.2f\t%8.1f\n", avgScore, avgTime)
-		fmt.Printf("Total cases: %d\n", testCount)
+		fmt.Printf("Total\t\t\t%8.2f\n", totalScore*150/float64(testCount))
 	} else {
 		fmt.Println("No test cases found")
 	}
@@ -123,7 +123,6 @@ func readInt() int {
 }
 
 func Solve2(N int, grid []string) [][]int {
-	startTime := time.Now()
 	rand.Seed(time.Now().UnixNano())
 
 	emptyCells := make(map[int]int)
@@ -134,14 +133,13 @@ func Solve2(N int, grid []string) [][]int {
 			}
 		}
 	}
-	// 初期解をヒューリスティックで生成
-	initialOrder := getInitialOrder(grid, emptyCells, N)
+	initialOrder := getGreedyOrder(grid, emptyCells, N)
 
 	// 焼きなましで最適化（1.8秒制限）
-	return simulatedAnnealing(startTime, grid, initialOrder, N)
-	//return initialOrder
+	return simulatedAnnealing(grid, initialOrder, N)
 }
 
+// 複数回貪欲解を解いてみて、一番いいやつを選ぶ
 func Solve1(N int, grid []string) [][]int {
 	rand.Seed(time.Now().UnixNano())
 
@@ -153,20 +151,25 @@ func Solve1(N int, grid []string) [][]int {
 			}
 		}
 	}
-	// 初期解をヒューリスティックで生成
-	initialOrder := getInitialOrder(grid, emptyCells, N)
 
-	// 焼きなましで最適化（1.8秒制限）
-	//return simulatedAnnealing(startTime, grid, initialOrder, N)
-	return initialOrder
+	return getBestGreedyOrder(grid, emptyCells, N)
 }
 
-func getInitialOrder(grid []string, emptyCells map[int]int, N int) [][]int {
-	// 動的優先度キューベースの追い込み漁戦略
-	return getGreedyInitialOrder(grid, emptyCells, N)
+func getBestGreedyOrder(grid []string, emptyCells map[int]int, N int) [][]int {
+	timeLimit := 1500 * time.Millisecond // 1.8秒
+	bestOrder := getGreedyOrder(grid, emptyCells, N)
+	bestScore := CalculateScore(grid, bestOrder, N)
+	for time.Since(StartTime) < timeLimit {
+		order := getGreedyOrder(grid, emptyCells, N)
+		orderScore := CalculateScore(grid, order, N)
+		if orderScore > bestScore {
+			bestOrder = order
+		}
+	}
+	return bestOrder
 }
 
-func getGreedyInitialOrder(grid []string, emptyCells map[int]int, N int) [][]int {
+func getGreedyOrder(grid []string, emptyCells map[int]int, N int) [][]int {
 	// 現在のグリッド状態をコピー
 	currentGrid := make([][]byte, N)
 	for i := 0; i < N; i++ {
@@ -208,8 +211,9 @@ func getGreedyInitialOrder(grid []string, emptyCells map[int]int, N int) [][]int
 	return result
 }
 
-func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int) [][]int {
+func simulatedAnnealing(grid []string, order [][]int, N int) [][]int {
 	timeLimit := 1800 * time.Millisecond // 1.8秒
+	K := 100
 
 	current := make([][]int, len(order))
 	copy(current, order)
@@ -217,7 +221,7 @@ func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int
 	best := make([][]int, len(order))
 	copy(best, order)
 
-	currentScore := CalculateScore(grid, current, N)
+	currentScore := calculateScoreByUpdatePerK(K, grid, current, N)
 	bestScore := currentScore
 
 	// 焼きなましパラメータ
@@ -227,9 +231,9 @@ func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int
 	iter := 0
 	scoreCalculations := 0
 
-	for time.Since(startTime) < timeLimit {
+	for {
 		// 経過時間による温度計算
-		elapsed := time.Since(startTime)
+		elapsed := time.Since(StartTime)
 		progress := float64(elapsed) / float64(timeLimit)
 		temp := startTemp * math.Pow(endTemp/startTemp, progress)
 
@@ -269,7 +273,7 @@ func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int
 			}
 		}
 
-		neighborScore := CalculateScore(grid, neighbor, N)
+		neighborScore := calculateScoreByUpdatePerK(K, grid, neighbor, N)
 		scoreCalculations++
 
 		// 受諾判定
@@ -286,7 +290,11 @@ func simulatedAnnealing(startTime time.Time, grid []string, order [][]int, N int
 		}
 
 		iter++
+		if time.Since(StartTime) > timeLimit {
+			break
+		}
 	}
+	//fmt.Println(iter)
 	return best
 }
 
@@ -298,7 +306,10 @@ func fromIndex(idx, N int) (int, int) {
 	return idx / N, idx % N
 }
 func CalculateScore(grid []string, order [][]int, N int) float64 {
+	return calculateScoreByUpdatePerK(1, grid, order, N)
+}
 
+func calculateScoreByUpdatePerK(K int, grid []string, order [][]int, N int) float64 {
 	// 現在のグリッド状態をコピー
 	currentGrid := make([][]byte, N)
 	for i := 0; i < N; i++ {
@@ -333,25 +344,22 @@ func CalculateScore(grid []string, order [][]int, N int) float64 {
 	life := 1.0
 
 	// 各ステップをシミュレーション
-	for _, pos := range order {
+	for i, pos := range order {
 		bi, bj := pos[0], pos[1]
-
-		nextProb := calculateNextProb(currentGrid, prob, N)
-
+		// prob更新をサボる
+		if i%K == 0 {
+			prob = calculateNextProb(currentGrid, prob, N)
+		}
 		// 岩を置く前の生存確率を計算
 		targetIdx := toIndex(bi, bj, N)
-		if hitProb, exists := nextProb[targetIdx]; exists {
+		if hitProb, exists := prob[targetIdx]; exists {
 			life -= hitProb
 		}
-		// 岩を置く
-		currentGrid[bi][bj] = '#'
-		delete(nextProb, targetIdx)
-
 		// スコアに追加
 		totalScore += life
-
-		// 確率分布を更新
-		prob = nextProb
+		// 岩を置く
+		currentGrid[bi][bj] = '#'
+		delete(prob, targetIdx)
 	}
 
 	return totalScore
