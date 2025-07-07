@@ -172,7 +172,7 @@ func Solve3(N int, grid []string) [][]int {
 }
 
 func getBestGreedyOrder(grid []string, emptyCells map[int]int, N int, greedy func(grid []string, emptyCells map[int]int, N int) [][]int) [][]int {
-	timeLimit := 1500 * time.Millisecond // 1.8秒
+	timeLimit := 1400 * time.Millisecond
 	bestOrder := greedy(grid, emptyCells, N)
 	bestScore := CalculateScore(grid, bestOrder, N)
 	for time.Since(StartTime) < timeLimit {
@@ -246,32 +246,31 @@ func getAdvancedGreedyOrder(grid []string, emptyCells map[int]int, N int) [][]in
 
 	var result [][]int
 	for len(prob) > 0 {
-		nextProb := calculateNextProb(currentGrid, prob, N)
+		prob = calculateNextProb(currentGrid, prob, N)
 
 		// 確率が10^-6以下のセルを最優先で選ぶ
 		lowProbCells := make([]int, 0)
-		for idx, p := range nextProb {
+		for idx, p := range prob {
 			if p <= 1e-6 {
 				lowProbCells = append(lowProbCells, idx)
 			}
 		}
 
-		var selectedIndex int
-		if len(lowProbCells) > 0 {
-			// 確率が10^-6以下のセルの中から、周りに岩が最も少ないものを選ぶ
-			minRocks := math.MaxInt32
-			for _, idx := range lowProbCells {
-				i, j := fromIndex(idx, N)
-				rockCount := countSurroundingRocks(currentGrid, i, j, N)
-				if rockCount < minRocks {
-					minRocks = rockCount
-					selectedIndex = idx
-				}
+		selectedIndex := -1
+		maxProb := 0.0
+		for _, idx := range lowProbCells {
+			i, j := fromIndex(idx, N)
+			aroundP := maxProbAround(currentGrid, prob, i, j, N)
+			c := rockCount(currentGrid, i, j, N) / 50
+			if aroundP+c >= maxProb {
+				maxProb = aroundP + c
+				selectedIndex = idx
 			}
-		} else {
+		}
+		if selectedIndex == -1 {
 			// 確率が10^-6以下のセルがない場合は、従来通り最小確率を選ぶ
 			minProb := 10000.0
-			for idx, p := range nextProb {
+			for idx, p := range prob {
 				if p == 0 {
 					minProb = p
 					selectedIndex = idx
@@ -287,8 +286,7 @@ func getAdvancedGreedyOrder(grid []string, emptyCells map[int]int, N int) [][]in
 		i, j := fromIndex(selectedIndex, N)
 		result = append(result, []int{i, j})
 		currentGrid[i][j] = '#'
-		delete(nextProb, selectedIndex)
-		prob = nextProb
+		delete(prob, selectedIndex)
 	}
 
 	return result
@@ -299,18 +297,59 @@ func countSurroundingRocks(grid [][]byte, i, j, N int) int {
 	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
 	for _, dir := range directions {
 		ni, nj := i+dir[0], j+dir[1]
-		if ni >= 0 && ni < N && nj >= 0 && nj < N && grid[ni][nj] == '#' {
-			count++
-		} else if ni < 0 || ni >= N || nj < 0 || nj >= N {
-			// 境界外も岩とみなす
+		if ni < 0 || ni >= N || nj < 0 || nj >= N || grid[ni][nj] == '#' {
 			count++
 		}
 	}
 	return count
 }
 
+// 高い確率だが、まだ3方以上閉じられてないやつを探す
+func maxProbAround(grid [][]byte, prob map[int]float64, i, j, N int) float64 {
+	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+	var maxProb float64
+	for _, dir := range directions {
+		ni, nj := i+dir[0], j+dir[1]
+		if ni < 0 || ni >= N || nj < 0 || nj >= N || grid[ni][nj] == '#' {
+			continue
+		}
+		p := prob[toIndex(ni, nj, N)]
+		if count := countSurroundingRocks(grid, ni, nj, N); count >= 3 {
+			continue
+		}
+		if p > maxProb {
+			maxProb = p
+		}
+	}
+	return maxProb
+}
+
+// 2個先に岩があるとプラス、斜めに岩があるとマイナスでどうか
+func rockCount(grid [][]byte, i, j, N int) float64 {
+	if countSurroundingRocks(grid, i, j, N) == 3 {
+		return 1
+	}
+	directions := [][]int{{-2, 0}, {2, 0}, {0, -2}, {0, 2}}
+	diagonalDirections := [][]int{{-1, -1}, {1, 1}, {1, -1}, {-1, 1}}
+	count := 4
+	for _, dir := range directions {
+		ni, nj := i+dir[0], j+dir[1]
+		if ni < 0 || ni >= N || nj < 0 || nj >= N || grid[ni][nj] == '#' {
+			count++
+		}
+	}
+	for _, dir := range diagonalDirections {
+		ni, nj := i+dir[0], j+dir[1]
+		if ni < 0 || ni >= N || nj < 0 || nj >= N || grid[ni][nj] == '#' {
+			count--
+		}
+	}
+
+	return float64(count) / 9.0
+}
+
 func simulatedAnnealing(grid []string, order [][]int, N int) [][]int {
-	timeLimit := 1800 * time.Millisecond // 1.8秒
+	timeLimit := 1800 * time.Millisecond
 	K := 100
 
 	current := make([][]int, len(order))
@@ -467,6 +506,9 @@ func calculateNextProb(grid [][]byte, prob map[int]float64, N int) map[int]float
 	nextProb := make(map[int]float64)
 	// 各位置からロボットが4方向に移動
 	for idx, probability := range prob {
+		if _, ok := nextProb[idx]; !ok {
+			nextProb[idx] = 0
+		}
 		i, j := fromIndex(idx, N)
 		// 4方向への移動をシミュレーション
 		directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
