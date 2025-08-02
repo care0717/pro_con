@@ -1,0 +1,14 @@
+[
+ {
+  "input": "6 3\nR 4\nL 5\nR 6",
+  "output": "8"
+ },
+ {
+  "input": "100 2\nL 1\nR 2",
+  "output": "0"
+ },
+ {
+  "input": "30 8\nR 23\nR 26\nR 29\nL 20\nR 29\nR 19\nL 7\nL 16",
+  "output": "92"
+ }
+]
