@@ -4,7 +4,9 @@ use itertools::Itertools;
 use proconio::input;
 use rand::prelude::*;
 use std::{collections::VecDeque, ops::RangeBounds};
-use svg::node::element::{Circle, Group, Line, Rectangle, Style, Title};
+use svg::node::element::{
+    Circle, Definitions, Group, Line, Marker, Polygon, Rectangle, Style, Title,
+};
 
 pub trait SetMinMax {
     fn setmin(&mut self, v: Self) -> bool;
@@ -36,7 +38,7 @@ macro_rules! mat {
 	($e:expr; $d:expr $(; $ds:expr)+) => { Vec::from(vec![mat![$e $(; $ds)*]; $d]) };
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Input {
     pub N: usize,
     pub M: usize,
@@ -88,6 +90,7 @@ pub fn read<T: Copy + PartialOrd + std::fmt::Display + std::str::FromStr, R: Ran
     }
 }
 
+#[derive(serde::Serialize)]
 pub struct Output {
     pub ds: Vec<usize>,
     pub s: usize,
@@ -348,8 +351,29 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
         .set("width", W + 10)
         .set("height", H + 10)
         .set("style", "background-color:white");
+    // 矢印マーカーの定義
+    let defs = Definitions::new().add(
+        Marker::new()
+            .set("id", "arrowhead")
+            .set("markerWidth", 10)
+            .set("markerHeight", 7)
+            .set("refX", 9)
+            .set("refY", 3.5)
+            .set("orient", "auto")
+            .add(
+                Polygon::new()
+                    .set("points", "0 0, 10 3.5, 0 7")
+                    .set("fill", "gray"),
+            ),
+    );
+    doc = doc.add(defs);
+
     doc = doc.add(Style::new(format!(
-        "text {{text-anchor: middle;dominant-baseline: central;}}"
+        "text {{text-anchor: middle;dominant-baseline: central;}} \
+         .edge-line {{ marker-end: url(#arrowhead); }} \
+         .separator-node {{ fill: lightblue; stroke: darkblue; stroke-width: 1.5; }} \
+         .processor-node {{ fill: lightgreen; stroke: darkgreen; stroke-width: 2; }} \
+         .entrance-node {{ fill: orange; stroke: darkorange; stroke-width: 2; }}"
     )));
     let c = if target == !0 {
         "gray".to_owned()
@@ -376,7 +400,8 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                 .set("x2", get_x(p))
                 .set("y2", get_y(p))
                 .set("stroke", c.clone())
-                .set("stroke-width", 2),
+                .set("stroke-width", 2)
+                .set("class", "edge-line"),
         ),
     );
     doc = doc.add(
@@ -390,7 +415,7 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                 .set("cx", 0)
                 .set("cy", H / 2)
                 .set("r", 3)
-                .set("fill", c.clone()),
+                .set("class", "entrance-node"),
         ),
     );
     // edge
@@ -431,7 +456,8 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                     .set("x2", get_x(q1))
                     .set("y2", get_y(q1))
                     .set("stroke", c1.clone())
-                    .set("stroke-width", 2),
+                    .set("stroke-width", 2)
+                    .set("class", "edge-line"),
             ),
         );
         doc = doc.add(
@@ -447,7 +473,8 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                     .set("x2", get_x(q2))
                     .set("y2", get_y(q2))
                     .set("stroke", c2.clone())
-                    .set("stroke-width", 2),
+                    .set("stroke-width", 2)
+                    .set("class", "edge-line"),
             ),
         );
     }
@@ -464,11 +491,6 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
         } else {
             format!("sorter {}", k)
         };
-        let c = if target == !0 {
-            "gray".to_owned()
-        } else {
-            color(pr)
-        };
         doc = doc.add(
             group(if target == !0 {
                 format!("vertex: {} ({})", input.N + i, k)
@@ -480,18 +502,13 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                     .set("cx", get_x(input.pos[input.N + i]))
                     .set("cy", get_y(input.pos[input.N + i]))
                     .set("r", 3)
-                    .set("fill", c),
+                    .set("class", "separator-node"),
             ),
         );
     }
     for i in 0..input.N {
         let pr = if target == !0 { 1.0 } else { probs[i][target] };
         let d = out.ds[i];
-        let c = if target == !0 {
-            "gray".to_owned()
-        } else {
-            color(pr)
-        };
         doc = doc.add(
             group(if target == !0 {
                 format!("vertex: {} (processor {})", i, d)
@@ -503,9 +520,7 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                     .set("cx", get_x(input.pos[i]))
                     .set("cy", get_y(input.pos[i]))
                     .set("r", if d == target { 6 } else { 4 })
-                    .set("fill", c)
-                    .set("stroke", "black")
-                    .set("stroke-width", if d == target { 2 } else { 1 }),
+                    .set("class", "processor-node"),
             ),
         );
     }
