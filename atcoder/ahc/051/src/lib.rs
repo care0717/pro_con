@@ -176,10 +176,36 @@ pub fn compute_score_details(input: &Input, out: &Output) -> (i64, String, Vec<V
             continue;
         }
         if out.cs[i].1 >= input.N && out.cs[out.cs[i].1 - input.N].0 == !0 {
-            return (0, format!("Invalid v1 in the {}-th position", i), probs);
+            let separator_i_pos = input.pos[input.N + i];
+            let v1_pos = input.pos[out.cs[i].1];
+            let v2_pos = input.pos[out.cs[i].2];
+            return (
+                0,
+                format!(
+                    "Invalid v1 in the {}-th position. {} {} {}\nSeparator {} pos: ({}, {})\nv1 {} pos: ({}, {})\nv2 {} pos: ({}, {})",
+                    i, out.cs[i].0, out.cs[i].1, out.cs[i].2,
+                    input.N + i, separator_i_pos.0, separator_i_pos.1,
+                    out.cs[i].1, v1_pos.0, v1_pos.1,
+                    out.cs[i].2, v2_pos.0, v2_pos.1
+                ),
+                probs,
+            );
         }
         if out.cs[i].2 >= input.N && out.cs[out.cs[i].2 - input.N].0 == !0 {
-            return (0, format!("Invalid v2 in the {}-th position", i), probs);
+            let separator_i_pos = input.pos[input.N + i];
+            let v1_pos = input.pos[out.cs[i].1];
+            let v2_pos = input.pos[out.cs[i].2];
+            return (
+                0,
+                format!(
+                    "Invalid v2 in the {}-th position. {} {} {}\nSeparator {} pos: ({}, {})\nv1 {} pos: ({}, {})\nv2 {} pos: ({}, {})",
+                    i, out.cs[i].0, out.cs[i].1, out.cs[i].2,
+                    input.N + i, separator_i_pos.0, separator_i_pos.1,
+                    out.cs[i].1, v1_pos.0, v1_pos.1,
+                    out.cs[i].2, v2_pos.0, v2_pos.1
+                ),
+                probs,
+            );
         }
         segs.push((input.pos[input.N + i], input.pos[out.cs[i].1]));
         segs.push((input.pos[input.N + i], input.pos[out.cs[i].2]));
