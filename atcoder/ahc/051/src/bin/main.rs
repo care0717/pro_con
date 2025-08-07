@@ -65,6 +65,9 @@ struct Graph {
     separator_positions: Vec<Point>,
     probabilities: Vec<Vec<f64>>,
     edges: HashMap<NodeId, Out>,
+    start_node: NodeId, // 搬入口の特別なNodeID
+    // 各分別器から他のノードへの距離順ソート済み配列 [分別器インデックス][距離順のノード]
+    separator_distance_sorted: Vec<Vec<(NodeId, f64)>>,
 }
 
 #[derive(Clone, Debug)]
@@ -194,6 +197,34 @@ fn create_graph(
     separator_positions: Vec<Point>,
     probabilities: Vec<Vec<f64>>,
 ) -> Graph {
+    // 各分別器から他のノードへの距離順配列を事前計算
+    let mut separator_distance_sorted = Vec::new();
+
+    for sep_idx in 0..m {
+        let sep_pos = separator_positions[sep_idx];
+        let mut distances = Vec::new();
+
+        // 処理装置への距離
+        for proc_idx in 0..n {
+            let proc_pos = processor_positions[proc_idx];
+            let dist = distance(sep_pos, proc_pos);
+            distances.push((proc_idx, dist));
+        }
+
+        // 他の分別器への距離
+        for other_sep_idx in 0..m {
+            if other_sep_idx != sep_idx {
+                let other_sep_pos = separator_positions[other_sep_idx];
+                let dist = distance(sep_pos, other_sep_pos);
+                distances.push((n + other_sep_idx, dist)); // 分別器のNodeIdは n + インデックス
+            }
+        }
+
+        // 距離順でソート
+        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        separator_distance_sorted.push(distances);
+    }
+
     Graph {
         n,
         m,
@@ -201,26 +232,43 @@ fn create_graph(
         separator_positions,
         probabilities,
         edges: HashMap::new(),
+        start_node: 0,
+        separator_distance_sorted,
     }
 }
 
-fn solve(graph: &Graph) -> (Vec<usize>, usize, Vec<String>) {
+fn solve(
+    n: usize,
+    m: usize,
+    processor_positions: Vec<Point>,
+    separator_positions: Vec<Point>,
+    probabilities: Vec<Vec<f64>>,
+) -> (Vec<usize>, usize, Vec<String>) {
     // 距離ベースの貪欲アルゴリズムでネットワークを構築（交差処理込み）
-    let (start_node, separator_configs) = build_network_greedy(graph);
-
+    let mut graph = build_network_greedy(create_graph(
+        n,
+        m,
+        processor_positions,
+        separator_positions,
+        probabilities,
+    ));
+    // 1本しか線がでいない分配器の接続
+    graph = connect_graph(&graph);
+    // 最終的な設定をwork_graph.edgesから生成
+    let configs = generate_configs_from_graph(&graph);
     // デバイス割り当ては単純に順番通り
     let device_assignments: Vec<usize> = (0..graph.n).collect();
 
-    (device_assignments, start_node, separator_configs)
+    (device_assignments, graph.start_node, configs)
 }
 
-fn build_network_greedy(graph: &Graph) -> (usize, Vec<String>) {
+fn build_network_greedy(graph: Graph) -> Graph {
     let mut work_graph = graph.clone(); // 作業用のグラフ
     let mut used_separators = vec![false; graph.m];
     let mut queue = std::collections::VecDeque::new();
 
     if graph.separator_positions.is_empty() {
-        return (0, vec!["-1".to_string(); graph.m]);
+        return graph.clone(); // 分別器がない場合はそのまま返す
     }
 
     let start_pos = Point { x: 0, y: 5000 };
@@ -239,6 +287,7 @@ fn build_network_greedy(graph: &Graph) -> (usize, Vec<String>) {
 
     // 搬入口から最初の分別器への辺を追加
     let first_sep_node = graph.n + nearest_sep;
+    work_graph.start_node = first_sep_node;
     add_edge(
         &mut work_graph,
         ENTRANCE_NODE,
@@ -256,30 +305,25 @@ fn build_network_greedy(graph: &Graph) -> (usize, Vec<String>) {
         }
 
         let current_node = graph.n + current_sep_idx;
-        let current_pos = graph.separator_positions[current_sep_idx];
 
-        // 距離順に候補を並べる
+        // 事前計算された距離順配列を使用して候補を選択
         let mut candidates = Vec::new();
 
-        // 全ての処理装置への距離
-        if counter > 10 {
-            for i in 0..graph.processor_positions.len() {
-                let device_pos = graph.processor_positions[i];
-                let dist = distance(current_pos, device_pos);
-                candidates.push((dist, i)); // NodeID: i (処理装置)
+        // 事前計算された距離配列から候補を取得
+        for &(node_id, dist) in &graph.separator_distance_sorted[current_sep_idx] {
+            if node_id < graph.n {
+                // 処理装置の場合：counter > 10の場合のみ追加
+                if counter > 10 {
+                    candidates.push((dist, node_id));
+                }
+            } else {
+                // 分別器の場合：未使用の場合のみ追加
+                let sep_idx = node_id - graph.n;
+                if !used_separators[sep_idx] {
+                    candidates.push((dist, node_id));
+                }
             }
         }
-
-        // 未使用の分別器への距離
-        for i in 0..graph.separator_positions.len() {
-            if !used_separators[i] {
-                let sep_pos = graph.separator_positions[i];
-                let dist = distance(current_pos, sep_pos);
-                candidates.push((dist, graph.n + i)); // NodeID: n+i (分別器)
-            }
-        }
-
-        candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         // 2つの出力先を選択
         let mut output1 = None;
@@ -320,21 +364,181 @@ fn build_network_greedy(graph: &Graph) -> (usize, Vec<String>) {
     }
     // 構築完了後、処理装置に接続されていない分別器を繰り返し削除
     remove_disconnected_separators(&mut work_graph);
-    // 最終的な設定をwork_graph.edgesから生成
-    let configs = generate_configs_from_graph(graph, &work_graph);
-    let start_node = graph.n + nearest_sep;
-    (start_node, configs)
+
+    work_graph
 }
 
-// work_graph.edgesからconfigsを生成
-fn generate_configs_from_graph(graph: &Graph, work_graph: &Graph) -> Vec<String> {
+// グラフにサイクルがあるかチェック
+fn has_cycle(graph: &Graph) -> bool {
+    let mut visited = std::collections::HashSet::new();
+    let mut rec_stack = std::collections::HashSet::new();
+
+    fn dfs(
+        graph: &Graph,
+        node: NodeId,
+        visited: &mut std::collections::HashSet<NodeId>,
+        rec_stack: &mut std::collections::HashSet<NodeId>,
+    ) -> bool {
+        visited.insert(node);
+        rec_stack.insert(node);
+
+        if let Some(out) = graph.edges.get(&node) {
+            // out1をチェック
+            if !visited.contains(&out.out1) {
+                if dfs(graph, out.out1, visited, rec_stack) {
+                    return true;
+                }
+            } else if rec_stack.contains(&out.out1) {
+                return true;
+            }
+
+            // out2をチェック
+            if !visited.contains(&out.out2) {
+                if dfs(graph, out.out2, visited, rec_stack) {
+                    return true;
+                }
+            } else if rec_stack.contains(&out.out2) {
+                return true;
+            }
+        }
+
+        rec_stack.remove(&node);
+        false
+    }
+
+    // 搬入口から開始
+    if dfs(graph, graph.start_node, &mut visited, &mut rec_stack) {
+        return true;
+    }
+
+    // 他の未訪問ノードからも開始
+    for sep_idx in 0..graph.m {
+        let sep_node = graph.n + sep_idx;
+        if !visited.contains(&sep_node) && graph.edges.contains_key(&sep_node) {
+            if dfs(graph, sep_node, &mut visited, &mut rec_stack) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+// 1本しか線がでいない分配器に対して、近くの点を見て自分が繋がっていない処理設備と繋がっている分配器を優先して接続してみる
+fn connect_graph(graph: &Graph) -> Graph {
+    let mut work_graph = graph.clone();
+
+    // 接続が1本しかない分別器を探す
+    let mut single_connected_separators = Vec::new();
+    for sep_idx in 0..work_graph.m {
+        let sep_node = work_graph.n + sep_idx;
+        if work_graph.edges.contains_key(&sep_node) {
+            continue; // 既に接続されている
+        }
+        single_connected_separators.push(sep_node);
+    }
+
+    // 各処理装置への到達可能性を計算
+    let reachouts = get_reachout_edge(&work_graph);
+
+    // 到達できていない処理装置を特定
+    let mut unreachable_processors = std::collections::HashSet::new();
+    for proc_idx in 0..work_graph.n {
+        let mut can_reach = false;
+        for sep_node in work_graph.n..(work_graph.n + work_graph.m) {
+            if let Some(edges_sep) = reachouts.get(&sep_node) {
+                if edges_sep[proc_idx].reachout > 0 {
+                    can_reach = true;
+                    break;
+                }
+            }
+        }
+        if !can_reach {
+            unreachable_processors.insert(proc_idx);
+        }
+    }
+
+    // 1本しか接続されていない分別器を処理
+    for &sep_node in &single_connected_separators {
+        let sep_idx = sep_node - work_graph.n;
+
+        // 事前計算された距離順配列を使用して候補を取得
+        let mut candidates = Vec::new();
+
+        for &(node_id, distance) in &work_graph.separator_distance_sorted[sep_idx] {
+            if candidates.len() >= 10 {
+                break;
+            }
+            if node_id < work_graph.n {
+                // 処理装置の場合：未到達のものを優先
+                let priority = if unreachable_processors.contains(&node_id) {
+                    0.0 // 最高優先度
+                } else {
+                    distance
+                };
+                candidates.push((node_id, priority));
+            } else {
+                // 分別器の場合：未接続のものを優先
+                let priority = if work_graph.edges.contains_key(&node_id) {
+                    distance * 2.0 // 優先度を下げる
+                } else {
+                    distance
+                };
+                candidates.push((node_id, priority));
+            }
+        }
+
+        // 優先度順でソート
+        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // 最適な接続先を2つ選択（交差しない組み合わせ）
+        let mut best_out1 = None;
+        let mut best_out2 = None;
+
+        for &(candidate1, _) in &candidates {
+            for &(candidate2, _) in &candidates {
+                if candidate1 >= candidate2 {
+                    continue;
+                }
+
+                // 辺の交差チェック
+                if !edge_intersects(&work_graph, sep_node, candidate1, sep_node, candidate2)
+                    && !new_edge_intersects(&work_graph, sep_node, candidate1)
+                    && !new_edge_intersects(&work_graph, sep_node, candidate2)
+                {
+                    // サイクルチェック
+                    let mut temp_graph = work_graph.clone();
+                    add_edge(&mut temp_graph, sep_node, candidate1, candidate2);
+                    if !has_cycle(&temp_graph) {
+                        best_out1 = Some(candidate1);
+                        best_out2 = Some(candidate2);
+                        break;
+                    }
+                }
+            }
+            if best_out1.is_some() {
+                break;
+            }
+        }
+
+        // 接続を追加
+        if let (Some(out1), Some(out2)) = (best_out1, best_out2) {
+            add_edge(&mut work_graph, sep_node, out1, out2);
+        }
+    }
+    remove_disconnected_separators(&mut work_graph); // 接続されていない分別器を削除
+    work_graph
+}
+
+// graph.edgesからconfigsを生成
+fn generate_configs_from_graph(graph: &Graph) -> Vec<String> {
     let mut configs = vec!["-1".to_string(); graph.m];
-    let edges = get_reachout_edge(work_graph);
+    let edges = get_reachout_edge(graph);
     // eprintln!("Edges: {:?}", edges);
     for sep_idx in 0..graph.m {
         let sep_node = graph.n + sep_idx;
 
-        if let Some(out) = work_graph.edges.get(&sep_node) {
+        if let Some(out) = graph.edges.get(&sep_node) {
             let mut best_sep = 0;
             if let Some(edges_sep) = edges.get(&sep_node) {
                 // 分別器の出力先の重み付き到達可能性を取得
@@ -653,15 +857,13 @@ fn main() {
         .into_iter()
         .map(|(x, y)| Point { x, y })
         .collect();
-
-    let graph = create_graph(
+    let (device_assignments, start_node, separator_configs) = solve(
         n,
         m,
         processor_positions,
         separator_positions,
         probabilities,
     );
-    let (device_assignments, start_node, separator_configs) = solve(&graph);
 
     print!(
         "{}",
@@ -942,7 +1144,13 @@ mod tests {
     #[test]
     fn test_solve_basic() {
         let graph = create_test_graph();
-        let (device_assignments, start_node, separator_configs) = solve(&graph);
+        let (device_assignments, start_node, separator_configs) = solve(
+            graph.n,
+            graph.m,
+            graph.processor_positions.clone(),
+            graph.separator_positions.clone(),
+            graph.probabilities.clone(),
+        );
 
         // デバイス割り当てチェック
         assert_eq!(device_assignments, vec![0, 1, 2]);
@@ -990,21 +1198,21 @@ mod tests {
         // 分別器0からの到達可能性
         if let Some(reachouts_sep0) = reachout_edges.get(&3) {
             // 処理装置0: 直接out2で到達 -> -1
-            assert_eq!(reachouts_sep0[0], -1);
+            assert_eq!(reachouts_sep0[0].reachout, -1);
             // 処理装置1: 分別器1経由でout1->out1で到達 -> +1
-            assert_eq!(reachouts_sep0[1], 1);
+            assert_eq!(reachouts_sep0[1].reachout, 1);
             // 処理装置2: 分別器1経由でout1->out2で到達 -> -1
-            assert_eq!(reachouts_sep0[2], 1);
+            assert_eq!(reachouts_sep0[2].reachout, 1);
         }
 
         // 分別器1からの到達可能性
         if let Some(reachouts_sep1) = reachout_edges.get(&4) {
             // 処理装置0: 到達不可能 -> 0
-            assert_eq!(reachouts_sep1[0], 0);
+            assert_eq!(reachouts_sep1[0].reachout, 0);
             // 処理装置1: out1で到達 -> +1
-            assert_eq!(reachouts_sep1[1], 1);
+            assert_eq!(reachouts_sep1[1].reachout, 1);
             // 処理装置2: out2で到達 -> -1
-            assert_eq!(reachouts_sep1[2], -1);
+            assert_eq!(reachouts_sep1[2].reachout, -1);
         }
     }
 
@@ -1021,12 +1229,12 @@ mod tests {
             let reachouts = &reachout_edges[&i];
 
             // 自分自身には到達可能 -> +1
-            assert_eq!(reachouts[i], 1);
+            assert_eq!(reachouts[i].reachout, 1);
 
             // 他の処理装置には到達不可能 -> 0
             for j in 0..graph.n {
                 if i != j {
-                    assert_eq!(reachouts[j], 0);
+                    assert_eq!(reachouts[j].reachout, 0);
                 }
             }
         }
@@ -1075,21 +1283,21 @@ mod tests {
         // 分別器0からの到達可能性（複数経路で処理装置に到達）
         if let Some(reachouts_sep0) = reachout_edges.get(&4) {
             // 処理装置0: 分別器3経由でout1→out1 -> +1
-            assert_eq!(reachouts_sep0[0], 1);
+            assert_eq!(reachouts_sep0[0].reachout, 1);
             // 処理装置1: 分別器3経由でout1→out2 -> 1
-            assert_eq!(reachouts_sep0[1], 1);
+            assert_eq!(reachouts_sep0[1].reachout, 1);
             // 処理装置2: 分別器4経由でout2→out1 -> -1
-            assert_eq!(reachouts_sep0[2], -1);
+            assert_eq!(reachouts_sep0[2].reachout, -1);
             // 処理装置3: 分別器4経由でout2→out2 -> +1
-            assert_eq!(reachouts_sep0[3], -1);
+            assert_eq!(reachouts_sep0[3].reachout, -1);
         }
 
         // 分別器1からの到達可能性（分別器0と同じ構造）
         if let Some(reachouts_sep1) = reachout_edges.get(&5) {
-            assert_eq!(reachouts_sep1[0], 1);
-            assert_eq!(reachouts_sep1[1], 1);
-            assert_eq!(reachouts_sep1[2], -1);
-            assert_eq!(reachouts_sep1[3], -1);
+            assert_eq!(reachouts_sep1[0].reachout, 1);
+            assert_eq!(reachouts_sep1[1].reachout, 1);
+            assert_eq!(reachouts_sep1[2].reachout, -1);
+            assert_eq!(reachouts_sep1[3].reachout, -1);
         }
     }
 
@@ -1129,18 +1337,18 @@ mod tests {
         // 分別器0からの到達可能性
         if let Some(reachouts_sep0) = reachout_edges.get(&3) {
             // 処理装置0: 分別器2経由でout1→out1 -> +1
-            assert_eq!(reachouts_sep0[0], 1);
+            assert_eq!(reachouts_sep0[0].reachout, 1);
             // 処理装置1: 直接out2で到達(-1) + 分別器2経由でout1→out2で到達(-1) = -2
-            assert_eq!(reachouts_sep0[1], 0);
+            assert_eq!(reachouts_sep0[1].reachout, 0);
             // 処理装置2: 到達不可能 -> 0
-            assert_eq!(reachouts_sep0[2], 0);
+            assert_eq!(reachouts_sep0[2].reachout, 0);
         }
 
         // 分別器1からの到達可能性（分別器0と同じ構造）
         if let Some(reachouts_sep1) = reachout_edges.get(&4) {
-            assert_eq!(reachouts_sep1[0], -1);
-            assert_eq!(reachouts_sep1[1], 0);
-            assert_eq!(reachouts_sep1[2], 0);
+            assert_eq!(reachouts_sep1[0].reachout, -1);
+            assert_eq!(reachouts_sep1[1].reachout, 0);
+            assert_eq!(reachouts_sep1[2].reachout, 0);
         }
     }
 
@@ -1178,20 +1386,20 @@ mod tests {
         // 分別器0からは直接的な到達不可能
         if let Some(reachouts_sep0) = reachout_edges.get(&2) {
             // アルゴリズムの実装上、同じ分別器への両出力は無効な経路
-            assert_eq!(reachouts_sep0[0], 1);
-            assert_eq!(reachouts_sep0[1], 0);
+            assert_eq!(reachouts_sep0[0].reachout, 1);
+            assert_eq!(reachouts_sep0[1].reachout, 0);
         }
 
         if let Some(reachouts_sep0) = reachout_edges.get(&3) {
             // アルゴリズムの実装上、同じ分別器への両出力は無効な経路
-            assert_eq!(reachouts_sep0[0], 0);
-            assert_eq!(reachouts_sep0[1], 0);
+            assert_eq!(reachouts_sep0[0].reachout, 0);
+            assert_eq!(reachouts_sep0[1].reachout, 0);
         }
 
         // 分別器3からの到達可能性（直接接続）
         if let Some(reachouts_sep3) = reachout_edges.get(&5) {
-            assert_eq!(reachouts_sep3[0], 1); // out1で到達
-            assert_eq!(reachouts_sep3[1], -1); // out2で到達
+            assert_eq!(reachouts_sep3[0].reachout, 1); // out1で到達
+            assert_eq!(reachouts_sep3[1].reachout, -1); // out2で到達
         }
     }
 
@@ -1231,32 +1439,32 @@ mod tests {
         // 分別器0からの到達可能性
         if let Some(reachouts_sep0) = reachout_edges.get(&3) {
             // 処理装置0: 分別器1経由でout1→out1 -> +1
-            assert_eq!(reachouts_sep0[0], 1);
+            assert_eq!(reachouts_sep0[0].reachout, 1);
             // 処理装置1: 複数経路での累積効果
             // 分別器1経由 + 分別器2経由で合計-2（実際の出力に基づく）
-            assert_eq!(reachouts_sep0[1], 0);
+            assert_eq!(reachouts_sep0[1].reachout, 0);
             // 処理装置2: 分別器2経由でout2→out2 -> +1（実際の出力に基づく）
-            assert_eq!(reachouts_sep0[2], -1);
+            assert_eq!(reachouts_sep0[2].reachout, -1);
         }
 
         // 分別器1からの到達可能性
         if let Some(reachouts_sep1) = reachout_edges.get(&4) {
             // 処理装置0: out1で到達 -> +1
-            assert_eq!(reachouts_sep1[0], 1);
+            assert_eq!(reachouts_sep1[0].reachout, 1);
             // 処理装置1: out2で到達 -> -1
-            assert_eq!(reachouts_sep1[1], -1);
+            assert_eq!(reachouts_sep1[1].reachout, -1);
             // 処理装置2: 到達不可能 -> 0
-            assert_eq!(reachouts_sep1[2], 0);
+            assert_eq!(reachouts_sep1[2].reachout, 0);
         }
 
         // 分別器2からの到達可能性
         if let Some(reachouts_sep2) = reachout_edges.get(&5) {
             // 処理装置0: 到達不可能 -> 0
-            assert_eq!(reachouts_sep2[0], 0);
+            assert_eq!(reachouts_sep2[0].reachout, 0);
             // 処理装置1: out1で到達 -> +1
-            assert_eq!(reachouts_sep2[1], 1);
+            assert_eq!(reachouts_sep2[1].reachout, 1);
             // 処理装置2: out2で到達 -> -1
-            assert_eq!(reachouts_sep2[2], -1);
+            assert_eq!(reachouts_sep2[2].reachout, -1);
         }
     }
 }

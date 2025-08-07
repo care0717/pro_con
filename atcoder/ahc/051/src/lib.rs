@@ -4,9 +4,7 @@ use itertools::Itertools;
 use proconio::input;
 use rand::prelude::*;
 use std::{collections::VecDeque, ops::RangeBounds};
-use svg::node::element::{
-    Circle, Definitions, Group, Line, Marker, Polygon, Rectangle, Style, Title,
-};
+use svg::node::element::{Circle, Definitions, Group, Line, Rectangle, Style, Title};
 
 pub trait SetMinMax {
     fn setmin(&mut self, v: Self) -> bool;
@@ -367,7 +365,6 @@ pub fn vis_default(input: &Input, out: &Output) -> (i64, String, String) {
     (score, err, svg)
 }
 
-
 pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) {
     let W = 600;
     let H = 600;
@@ -378,10 +375,10 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
         .set("width", W + 10)
         .set("height", H + 10)
         .set("style", "background-color:white");
-    
+
     // 動的な矢印マーカーの定義
-    let mut defs = Definitions::new();
-    
+    let defs = Definitions::new();
+
     doc = doc.add(defs);
 
     doc = doc.add(Style::new(format!(
@@ -460,8 +457,7 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
             (color(pr1), color(pr2))
         };
         doc = doc.add(
-            group(format!("edge: {} - {} | sep_type: {}", input.N + i, v1, k))
-            .add(
+            group(format!("edge: {} - {} | sep_type: {}", input.N + i, v1, k)).add(
                 Line::new()
                     .set("x1", get_x(p))
                     .set("y1", get_y(p))
@@ -477,8 +473,7 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
             ),
         );
         doc = doc.add(
-            group(format!("edge: {} - {} | sep_type: {}", input.N + i, v2, k))
-            .add(
+            group(format!("edge: {} - {} | sep_type: {}", input.N + i, v2, k)).add(
                 Line::new()
                     .set("x1", get_x(p))
                     .set("y1", get_y(p))
