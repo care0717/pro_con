@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(cargo check:*)",
-      "Bash(rustc:*)"
+      "Bash(rustc:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

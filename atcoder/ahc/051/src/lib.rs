@@ -4,7 +4,7 @@ use itertools::Itertools;
 use proconio::input;
 use rand::prelude::*;
 use std::{collections::VecDeque, ops::RangeBounds};
-use svg::node::element::{Circle, Definitions, Group, Line, Rectangle, Style, Title};
+use svg::node::element::{Circle, Definitions, Group, Line, Marker, Polygon, Rectangle, Style, Title};
 
 pub trait SetMinMax {
     fn setmin(&mut self, v: Self) -> bool;
@@ -377,7 +377,20 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
         .set("style", "background-color:white");
 
     // 動的な矢印マーカーの定義
-    let defs = Definitions::new();
+    let arrow_marker = Marker::new()
+        .set("id", "arrowhead")
+        .set("markerWidth", 4)
+        .set("markerHeight", 3)
+        .set("refX", 3.5)
+        .set("refY", 1.5)
+        .set("orient", "auto")
+        .add(
+            Polygon::new()
+                .set("points", "0 0, 4 1.5, 0 3")
+                .set("fill", "currentColor")
+        );
+
+    let defs = Definitions::new().add(arrow_marker);
 
     doc = doc.add(defs);
 
@@ -414,7 +427,8 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                 .set("y2", get_y(p))
                 .set("stroke", c.clone())
                 .set("stroke-width", 2)
-                .set("class", "edge-line"),
+                .set("class", "edge-line")
+                .set("marker-end", "url(#arrowhead)"),
         ),
     );
     doc = doc.add(
@@ -469,7 +483,8 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                     .set("data-separator-type", k)
                     .set("data-start", input.N + i)
                     .set("data-end", v1)
-                    .set("data-output", "out1"),
+                    .set("data-output", "out1")
+                    .set("marker-end", "url(#arrowhead)"),
             ),
         );
         doc = doc.add(
@@ -485,7 +500,8 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                     .set("data-separator-type", k)
                     .set("data-start", input.N + i)
                     .set("data-end", v2)
-                    .set("data-output", "out2"),
+                    .set("data-output", "out2")
+                    .set("marker-end", "url(#arrowhead)"),
             ),
         );
     }
