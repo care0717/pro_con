@@ -84,6 +84,12 @@ struct Source {
     ty: OutType,
 }
 
+#[derive(Clone, Debug)]
+struct WeightedReachability {
+    reachout: i32,
+    distance_weight: f64,
+}
+
 // NodeIDから座標を取得
 fn get_node_position(graph: &Graph, node_id: NodeId) -> Point {
     if node_id < graph.n {
@@ -320,6 +326,7 @@ fn build_network_greedy(graph: &Graph) -> (usize, Vec<String>) {
 fn generate_configs_from_graph(graph: &Graph, work_graph: &Graph) -> Vec<String> {
     let mut configs = vec!["-1".to_string(); graph.m];
     let edges = get_reachout_edge(work_graph);
+    // eprintln!("Edges: {:?}", edges);
     for sep_idx in 0..graph.m {
         let sep_node = graph.n + sep_idx;
 
@@ -463,58 +470,125 @@ fn remove_disconnected_separators(graph: &mut Graph) {
     }
 }
 
-fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<i32>> {
+fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<WeightedReachability>> {
     let reverse_graph = build_reverse_graph(graph);
 
     let mut queue = std::collections::VecDeque::new();
-    let mut visited: HashMap<NodeId, Vec<i32>> = std::collections::HashMap::new();
+    let mut visited: HashMap<NodeId, Vec<WeightedReachability>> = std::collections::HashMap::new();
     let mut can_reach = std::collections::HashMap::new();
+    let mut distances = std::collections::HashMap::new();
 
     // 全ての処理装置をスタート地点として追加
     for i in 0..graph.n {
-        let mut v = vec![0; graph.n];
-        v[i] = 1;
+        let mut v = vec![
+            WeightedReachability {
+                reachout: 0,
+                distance_weight: 0.0
+            };
+            graph.n
+        ];
+        v[i] = WeightedReachability {
+            reachout: 1,
+            distance_weight: 1.0,
+        }; // 自分への距離は1.0
         visited.insert(i, v.clone());
         let mut set = std::collections::HashSet::new();
         set.insert(i);
         can_reach.insert(i, set);
+        let mut dist_map = std::collections::HashMap::new();
+        dist_map.insert(i, 0.0); // 自分への距離は0
+        distances.insert(i, dist_map);
         queue.push_back(i);
     }
+
     while let Some(current) = queue.pop_front() {
         let current_processors = visited.get(&current).unwrap().clone();
         let current_can_reach = can_reach.get(&current).unwrap().clone();
+        let current_distances = distances.get(&current).unwrap().clone();
+
         if let Some(predecessors) = reverse_graph.get(&current) {
             for source in predecessors {
                 let predecessor = source.id;
+                let pred_pos = get_node_position(graph, predecessor);
+                let current_pos = get_node_position(graph, current);
+                let edge_distance = distance(pred_pos, current_pos);
+
                 if let Some(processors) = visited.get_mut(&predecessor) {
-                    let predeccessor_can_reach = can_reach.get_mut(&predecessor).unwrap();
-                    predeccessor_can_reach.extend(current_can_reach.iter().cloned());
+                    let predecessor_can_reach = can_reach.get_mut(&predecessor).unwrap();
+                    let predecessor_distances = distances.get_mut(&predecessor).unwrap();
+                    predecessor_can_reach.extend(current_can_reach.iter().cloned());
+
                     for j in 0..graph.n {
-                        if source.ty == OutType::Out1 {
-                            if current_processors[j] != 0 {
-                                processors[j] += current_processors[j].abs();
-                            } else if current_can_reach.contains(&j) {
-                                processors[j] += 1;
+                        if current_can_reach.contains(&j) {
+                            // 距離を更新（predecessor -> current -> processor j）
+                            let new_distance =
+                                current_distances.get(&j).unwrap_or(&f64::MAX) + edge_distance;
+                            let existing_distance =
+                                predecessor_distances.get(&j).unwrap_or(&f64::MAX);
+
+                            if new_distance < *existing_distance {
+                                predecessor_distances.insert(j, new_distance);
                             }
-                        } else {
-                            if current_processors[j] != 0 {
-                                processors[j] -= current_processors[j].abs();
-                            } else if current_can_reach.contains(&j) {
-                                processors[j] -= 1;
+
+                            // 距離の逆数を重みとして使用
+                            let distance_weight = if new_distance > 0.0 {
+                                1.0 / new_distance
+                            } else {
+                                1.0
+                            };
+
+                            if source.ty == OutType::Out1 {
+                                if current_processors[j].reachout != 0 {
+                                    processors[j].reachout += current_processors[j].reachout.abs();
+                                    processors[j].distance_weight += distance_weight;
+                                } else if current_can_reach.contains(&j) {
+                                    processors[j].reachout += 1;
+                                    processors[j].distance_weight += distance_weight;
+                                }
+                            } else {
+                                if current_processors[j].reachout != 0 {
+                                    processors[j].reachout -= current_processors[j].reachout.abs();
+                                    processors[j].distance_weight += distance_weight;
+                                } else if current_can_reach.contains(&j) {
+                                    processors[j].reachout -= 1;
+                                    processors[j].distance_weight += distance_weight;
+                                }
                             }
                         }
                     }
                 } else {
-                    let mut processors = vec![0; graph.n];
+                    let mut processors = vec![
+                        WeightedReachability {
+                            reachout: 0,
+                            distance_weight: 0.0
+                        };
+                        graph.n
+                    ];
+                    let mut new_distances = std::collections::HashMap::new();
+
                     for j in 0..graph.n {
-                        if source.ty == OutType::Out1 {
-                            processors[j] += current_processors[j].abs();
-                        } else {
-                            processors[j] -= current_processors[j].abs();
+                        if current_can_reach.contains(&j) {
+                            let new_distance =
+                                current_distances.get(&j).unwrap_or(&f64::MAX) + edge_distance;
+                            new_distances.insert(j, new_distance);
+                            let distance_weight = if new_distance > 0.0 {
+                                1.0 / new_distance
+                            } else {
+                                1.0
+                            };
+
+                            if source.ty == OutType::Out1 {
+                                processors[j].reachout += current_processors[j].reachout.abs();
+                                processors[j].distance_weight = distance_weight;
+                            } else {
+                                processors[j].reachout -= current_processors[j].reachout.abs();
+                                processors[j].distance_weight = distance_weight;
+                            }
                         }
                     }
                     visited.insert(predecessor, processors);
                     can_reach.insert(predecessor, current_can_reach.clone());
+                    distances.insert(predecessor, new_distances);
                     queue.push_back(predecessor);
                 }
             }
@@ -524,17 +598,25 @@ fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<i32>> {
     visited
 }
 
-fn select_best_separator_type(reachouts: Vec<i32>, probabilities: Vec<Vec<f64>>) -> usize {
+fn select_best_separator_type(
+    reachouts: Vec<WeightedReachability>,
+    probabilities: Vec<Vec<f64>>,
+) -> usize {
     let mut max = 0.0;
     let mut max_index = 0;
     for (i, probability) in probabilities.iter().enumerate() {
         let mut sum = 0.0;
-        for (j, &reachout) in reachouts.iter().enumerate() {
-            if reachout > 0 {
-                sum += probability[j];
+        for (j, weighted_reach) in reachouts.iter().enumerate() {
+            // 距離重みを適用した確率計算
+            let base_prob = if weighted_reach.reachout > 0 {
+                probability[j]
+            } else if weighted_reach.reachout < 0 {
+                1.0 - probability[j]
             } else {
-                sum += 1.0 - probability[j];
-            }
+                0.0 // 到達できない場合
+            };
+            // 距離重みをかけて評価値を計算
+            sum += base_prob * weighted_reach.distance_weight;
         }
         if sum >= max {
             max = sum;
@@ -722,15 +804,28 @@ mod tests {
     #[test]
     fn test_select_best_separator_type() {
         // 簡単な例：3つの処理装置、2つの分別器タイプ
-        let reachouts = vec![1, -1, 1]; // 処理装置0,2にはout1で到達、処理装置1にはout2で到達
+        let reachouts = vec![
+            WeightedReachability {
+                reachout: 1,
+                distance_weight: 1.0,
+            }, // 処理装置0
+            WeightedReachability {
+                reachout: -1,
+                distance_weight: 1.0,
+            }, // 処理装置1
+            WeightedReachability {
+                reachout: 1,
+                distance_weight: 1.0,
+            }, // 処理装置2
+        ];
         let probabilities = vec![
             vec![0.9, 0.1, 0.8], // タイプ0: 処理装置0,2に高確率、処理装置1に低確率
             vec![0.1, 0.9, 0.2], // タイプ1: 処理装置1に高確率、処理装置0,2に低確率
         ];
 
         let best_type = select_best_separator_type(reachouts, probabilities);
-        // タイプ0の期待値: 0.9 + (1-0.1) + 0.8 = 2.6
-        // タイプ1の期待値: 0.1 + 0.9 + 0.2 = 1.2
+        // タイプ0の期待値: 0.9*1.0 + (1-0.1)*1.0 + 0.8*1.0 = 2.6
+        // タイプ1の期待値: 0.1*1.0 + 0.9*1.0 + 0.2*1.0 = 1.2
         // タイプ0の方が高いはず
         assert_eq!(best_type, 0);
     }

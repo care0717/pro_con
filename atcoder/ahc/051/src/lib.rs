@@ -367,6 +367,7 @@ pub fn vis_default(input: &Input, out: &Output) -> (i64, String, String) {
     (score, err, svg)
 }
 
+
 pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) {
     let W = 600;
     let H = 600;
@@ -377,26 +378,15 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
         .set("width", W + 10)
         .set("height", H + 10)
         .set("style", "background-color:white");
-    // 矢印マーカーの定義
-    let defs = Definitions::new().add(
-        Marker::new()
-            .set("id", "arrowhead")
-            .set("markerWidth", 10)
-            .set("markerHeight", 7)
-            .set("refX", 9)
-            .set("refY", 3.5)
-            .set("orient", "auto")
-            .add(
-                Polygon::new()
-                    .set("points", "0 0, 10 3.5, 0 7")
-                    .set("fill", "gray"),
-            ),
-    );
+    
+    // 動的な矢印マーカーの定義
+    let mut defs = Definitions::new();
+    
     doc = doc.add(defs);
 
     doc = doc.add(Style::new(format!(
         "text {{text-anchor: middle;dominant-baseline: central;}} \
-         .edge-line {{ marker-end: url(#arrowhead); }} \
+         .edge-line {{ }} \
          .separator-node {{ fill: lightblue; stroke: darkblue; stroke-width: 1.5; }} \
          .processor-node {{ fill: lightgreen; stroke: darkgreen; stroke-width: 2; }} \
          .entrance-node {{ fill: orange; stroke: darkorange; stroke-width: 2; }}"
@@ -470,11 +460,7 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
             (color(pr1), color(pr2))
         };
         doc = doc.add(
-            group(if target == !0 {
-                format!("edge: {} - {}", input.N + i, v1)
-            } else {
-                format!("edge: {} - {}\nprob = {}", input.N + i, v1, pr1)
-            })
+            group(format!("edge: {} - {} | sep_type: {}", input.N + i, v1, k))
             .add(
                 Line::new()
                     .set("x1", get_x(p))
@@ -483,15 +469,15 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                     .set("y2", get_y(q1))
                     .set("stroke", c1.clone())
                     .set("stroke-width", 2)
-                    .set("class", "edge-line"),
+                    .set("class", "edge-line")
+                    .set("data-separator-type", k)
+                    .set("data-start", input.N + i)
+                    .set("data-end", v1)
+                    .set("data-output", "out1"),
             ),
         );
         doc = doc.add(
-            group(if target == !0 {
-                format!("edge: {} - {}", input.N + i, v2)
-            } else {
-                format!("edge: {} - {}\nprob = {}", input.N + i, v2, pr2)
-            })
+            group(format!("edge: {} - {} | sep_type: {}", input.N + i, v2, k))
             .add(
                 Line::new()
                     .set("x1", get_x(p))
@@ -500,7 +486,11 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
                     .set("y2", get_y(q2))
                     .set("stroke", c2.clone())
                     .set("stroke-width", 2)
-                    .set("class", "edge-line"),
+                    .set("class", "edge-line")
+                    .set("data-separator-type", k)
+                    .set("data-start", input.N + i)
+                    .set("data-end", v2)
+                    .set("data-output", "out2"),
             ),
         );
     }

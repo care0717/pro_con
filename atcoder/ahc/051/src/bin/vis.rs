@@ -139,10 +139,29 @@ fn main() {
         const outputData = {};
         let probabilities = {{}};
         
+        console.log('Script loaded, parsing JSON data...');
+        
+        // JSONデータを設定
+        try {{
+            Object.assign(inputData, {2});
+            Object.assign(outputData, {3});
+            console.log('JSON data assigned successfully');
+            console.log('inputData after assignment:', inputData);
+            console.log('outputData after assignment:', outputData);
+        }} catch (error) {{
+            console.error('Error parsing JSON data:', error);
+        }}
+        
         function calculateProbabilities(input, output) {{
+            console.log('calculateProbabilities called');
+            console.log('Input data:', input);
+            console.log('Output data:', output);
+            
             const probs = {{}};
             const N = input.N;
             const M = input.M;
+            
+            console.log(`N: ${{N}}, M: ${{M}}, start node: ${{output.s}}`);
             
             // 各ゴミ種類の確率を計算
             for (let wasteType = 0; wasteType < N; wasteType++) {{
@@ -155,95 +174,107 @@ fn main() {
                 
                 // 開始ノードの確率を1.0に設定
                 probs[wasteType][output.s] = 1.0;
+                console.log(`Set start node ${{output.s}} probability to 1.0 for waste type ${{wasteType}}`);
                 
-                // トポロジカルソートに基づいて確率を伝播
-                const visited = new Set();
-                const queue = [output.s];
+                // BFS的にネットワークを辿って確率を伝播
+                const processed = new Set();
+                const toProcess = [output.s];
                 
-                while (queue.length > 0) {{
-                    const node = queue.shift();
-                    if (visited.has(node)) continue;
-                    visited.add(node);
+                while (toProcess.length > 0) {{
+                    const node = toProcess.shift();
+                    if (processed.has(node)) continue;
+                    
+                    const nodeProb = probs[wasteType][node];
+                    if (nodeProb === 0) continue;
+                    
+                    processed.add(node);
+                    console.log(`Processing node ${{node}} for waste type ${{wasteType}}, prob: ${{nodeProb}}`);
                     
                     if (node >= N) {{ // 分別器ノード
                         const sepIndex = node - N;
-                        if (output.cs[sepIndex][0] !== 4294967295) {{ // !0 in Rust is max u32
+                        if (sepIndex < output.cs.length && output.cs[sepIndex][0] !== 4294967295) {{ // !0 in Rust is max u32
                             const sortType = output.cs[sepIndex][0];
                             const v1 = output.cs[sepIndex][1];
                             const v2 = output.cs[sepIndex][2];
                             
-                            const prob1 = input.ps[sortType][wasteType];
-                            const prob2 = 1.0 - prob1;
-                            
-                            probs[wasteType][v1] += probs[wasteType][node] * prob1;
-                            probs[wasteType][v2] += probs[wasteType][node] * prob2;
-                            
-                            queue.push(v1);
-                            queue.push(v2);
+                            if (sortType < input.ps.length && wasteType < input.ps[sortType].length) {{
+                                const prob1 = input.ps[sortType][wasteType];
+                                const prob2 = 1.0 - prob1;
+                                
+                                // 確率を伝播
+                                probs[wasteType][v1] += nodeProb * prob1;
+                                probs[wasteType][v2] += nodeProb * prob2;
+                                
+                                console.log(`Separator ${{node}} (type ${{sortType}}) -> v1: ${{v1}} (prob: ${{prob1 * nodeProb}}), v2: ${{v2}} (prob: ${{prob2 * nodeProb}})`);
+                                
+                                // 次の処理対象に追加
+                                if (!processed.has(v1)) toProcess.push(v1);
+                                if (!processed.has(v2)) toProcess.push(v2);
+                            }}
                         }}
                     }}
                 }}
             }}
             
+            console.log('Final probabilities:', probs);
             return probs;
         }}
         
         function getColor(probability) {{
-            const r = Math.round(30 + (255 - 30) * probability);
-            const g = Math.round(144 + (30 - 144) * probability);
-            const b = Math.round(255 + (30 - 255) * probability);
+            // 確率0-1を0-100に変換して整数にする
+            const p = Math.max(0, Math.min(1, probability));
+            
+            let r, g, b;
+            
+            if (p <= 0.5) {{
+                // 0.0-0.5: 青 → 緑
+                const t = p * 2; // 0-1に正規化
+                r = Math.round(0 * (1 - t) + 0 * t);
+                g = Math.round(0 * (1 - t) + 255 * t);
+                b = Math.round(255 * (1 - t) + 0 * t);
+            }} else {{
+                // 0.5-1.0: 緑 → 赤
+                const t = (p - 0.5) * 2; // 0-1に正規化
+                r = Math.round(0 * (1 - t) + 255 * t);
+                g = Math.round(255 * (1 - t) + 0 * t);
+                b = Math.round(0 * (1 - t) + 0 * t);
+            }}
+            
             return `rgb(${{r}}, ${{g}}, ${{b}})`;
         }}
         
-        function calculateEdgeProbability(wasteType, startNode, endNode) {{
-            console.log(`calculateEdgeProbability: wasteType=${{wasteType}}, start=${{startNode}}, end=${{endNode}}`);
+        function calculateEdgeProbability(wasteType, separatorType, output, startNode, endNode) {{
+            console.log(`calculateEdgeProbability: wasteType=${{wasteType}}, sepType=${{separatorType}}, output=${{output}}, start=${{startNode}}, end=${{endNode}}`);
             
-            // 始点への到達確率
+            // 始点への到達確率を取得
             const startProb = probabilities[wasteType] && probabilities[wasteType][startNode] ? probabilities[wasteType][startNode] : 0;
-            console.log(`Start probability: ${{startProb}}`);
+            console.log(`Start node ${{startNode}} probability: ${{startProb}}`);
             
             if (startProb === 0) {{
                 console.log('Start probability is 0, returning 0');
                 return 0;
             }}
             
-            // 分別器の設定を取得して、特定の出力への確率を計算
-            if (startNode >= inputData.N && outputData.cs) {{
-                const sepIdx = startNode - inputData.N;
-                console.log(`Separator index: ${{sepIdx}}`);
-                
-                if (sepIdx < outputData.cs.length) {{
-                    const sepConfig = outputData.cs[sepIdx];
-                    console.log(`Separator config:`, sepConfig);
-                    
-                    if (sepConfig && sepConfig.length >= 3 && sepConfig[0] !== 4294967295) {{
-                        const sortType = sepConfig[0];
-                        const out1 = sepConfig[1];
-                        const out2 = sepConfig[2];
-                        
-                        console.log(`Sort type: ${{sortType}}, out1: ${{out1}}, out2: ${{out2}}`);
-                        
-                        // この分別器からendNodeへの確率を計算
-                        if (endNode === out1) {{
-                            // 出力1への確率
-                            const prob1 = inputData.ps[sortType][wasteType];
-                            const result = startProb * prob1;
-                            console.log(`Output 1: prob1=${{prob1}}, result=${{result}}`);
-                            return result;
-                        }} else if (endNode === out2) {{
-                            // 出力2への確率
-                            const prob2 = 1.0 - inputData.ps[sortType][wasteType];
-                            const result = startProb * prob2;
-                            console.log(`Output 2: prob2=${{prob2}}, result=${{result}}`);
-                            return result;
-                        }}
-                    }}
+            // 分別器からの分岐確率を計算
+            if (separatorType >= 0 && separatorType < inputData.ps.length && wasteType < inputData.N) {{
+                let branchProb;
+                if (output === "out1") {{
+                    branchProb = inputData.ps[separatorType][wasteType];
+                }} else if (output === "out2") {{
+                    branchProb = 1.0 - inputData.ps[separatorType][wasteType];
+                }} else {{
+                    console.log('Invalid output type:', output);
+                    return 0;
                 }}
+                
+                // 実際の線分通過確率 = 始点到達確率 × 分岐確率
+                const edgeProb = startProb * branchProb;
+                console.log(`Edge probability: ${{startProb}} * ${{branchProb}} = ${{edgeProb}}`);
+                return edgeProb;
             }}
             
-            // 分別器でない場合や設定が不明な場合は始点確率をそのまま使用
-            console.log(`Fallback: returning start probability ${{startProb}}`);
-            return startProb;
+            console.log(`Invalid separator type: ${{separatorType}}`);
+            return 0;
         }}
         
         function updateVisualization() {{
@@ -285,19 +316,17 @@ fn main() {
         }}
         
         function resetVisualization() {{
-            // 全ての線を灰色に戻す
-            const edgeSelectors = ['line', 'path', '.edge-line', '.edge', '[stroke]'];
+            // 全ての線を元の色（灰色）に戻す
+            const groups = document.querySelectorAll('g');
             
-            edgeSelectors.forEach(selector => {{
-                document.querySelectorAll(selector).forEach(element => {{
-                    // ノード（円）は除外
-                    if (element.tagName.toLowerCase() !== 'circle') {{
-                        element.style.stroke = 'gray';
-                        if (element.tagName.toLowerCase() === 'path') {{
-                            element.style.fill = 'gray';
-                        }}
-                    }}
-                }});
+            groups.forEach(group => {{
+                const titleElement = group.querySelector('title');
+                const lineElement = group.querySelector('line');
+                
+                if (titleElement && lineElement && titleElement.textContent.includes('edge:')) {{
+                    lineElement.style.stroke = 'gray';
+                    lineElement.style.strokeWidth = '2'; // 元の太さに戻す
+                }}
             }});
             
             // 全ての処理装置の強調を解除
@@ -310,72 +339,61 @@ fn main() {
         function updateSVGColors(wasteType) {{
             console.log('updateSVGColors called with wasteType:', wasteType);
             
-            // 全ての線（line要素とpath要素）の色を確率に応じて更新
-            const edgeSelectors = ['line', 'path', '.edge-line', '.edge', '[stroke="gray"]'];
+            // SVG内の全てのgroup要素を取得
+            const groups = document.querySelectorAll('g');
+            console.log(`Found ${{groups.length}} groups`);
             
-            let totalElementsFound = 0;
             let elementsUpdated = 0;
             
-            edgeSelectors.forEach(selector => {{
-                const elements = document.querySelectorAll(selector);
-                console.log(`Found ${{elements.length}} elements with selector: ${{selector}}`);
-                totalElementsFound += elements.length;
+            groups.forEach(group => {{
+                const titleElement = group.querySelector('title');
+                const lineElement = group.querySelector('line');
                 
-                elements.forEach(element => {{
-                    // 親要素またはその近くのtitle要素を探す
-                    let titleElement = null;
-                    let currentElement = element;
+                if (!titleElement || !lineElement) {{
+                    return; // タイトルまたは線がない場合はスキップ
+                }}
+                
+                const titleText = titleElement.textContent;
+                console.log('Found title:', titleText);
+                
+                // エッジ（線）の場合のみ処理
+                if (titleText.includes('edge:')) {{
+                    let prob = 0;
                     
-                    // title要素を探す（親要素、兄弟要素、子要素を含む）
-                    for (let i = 0; i < 3; i++) {{
-                        titleElement = currentElement.querySelector('title') || 
-                                      currentElement.parentElement?.querySelector('title');
-                        if (titleElement) break;
-                        currentElement = currentElement.parentElement;
-                        if (!currentElement) break;
-                    }}
-                    
-                    if (!titleElement) {{
-                        console.log('No title element found for element:', element);
-                        return;
-                    }}
-                    
-                    const titleText = titleElement.textContent;
-                    console.log('Found title:', titleText);
-                    
-                    // タイトルから始点と終点を抽出
-                    const match = titleText.match(/(\\d+) - (\\d+)|inlet - (\\d+)/);
-                    if (match) {{
-                        let prob = 0;
-                        if (match[3]) {{ // inlet case (搬入口からの線分)
-                            // 搬入口からは確率1.0で出発
-                            prob = 1.0;
-                            console.log('Inlet case: prob = 1.0');
-                        }} else {{ // separator case (分別器からの線分)
+                    if (titleText.includes('inlet -')) {{
+                        // 搬入口からの線分
+                        prob = 1.0;
+                        console.log('Inlet case: prob = 1.0');
+                    }} else {{
+                        // 分別器からの線分 - titleから詳細情報を抽出
+                        const match = titleText.match(/edge: (\d+) - (\d+) \| sep_type: (\d+)/);
+                        console.log(`Regex match result:`, match);
+                        if (match) {{
                             const startNode = parseInt(match[1]);
                             const endNode = parseInt(match[2]);
+                            const separatorType = parseInt(match[3]);
+                            
+                            // data属性から出力タイプを取得
+                            const output = lineElement.getAttribute('data-output');
+                            console.log(`Output type from data attribute:`, output);
                             
                             // 線分の実際の通過確率を計算
-                            prob = calculateEdgeProbability(wasteType, startNode, endNode);
+                            prob = calculateEdgeProbability(wasteType, separatorType, output, startNode, endNode);
+                        }} else {{
+                            console.log(`No match for title: ${{titleText}}`);
                         }}
-                        
-                        const color = getColor(prob);
-                        element.style.stroke = color;
-                        
-                        // 矢印の場合はfillも変更
-                        if (element.tagName.toLowerCase() === 'path') {{
-                            element.style.fill = color;
-                        }}
-                        
-                        elementsUpdated++;
-                        console.log(`Updated edge: ${{titleText}} -> prob: ${{prob.toFixed(3)}} -> color: ${{color}}`);
-                    }} else {{
-                        console.log('No match found for title:', titleText);
                     }}
-                }});
+                    
+                    const color = getColor(prob);
+                    lineElement.style.stroke = color;
+                    lineElement.style.strokeWidth = '3'; // 少し太くして見やすく
+                    
+                    elementsUpdated++;
+                    console.log(`Updated edge: ${{titleText}} -> prob: ${{prob.toFixed(3)}} -> color: ${{color}}`);
+                }}
             }});
             
-            console.log(`Total elements found: ${{totalElementsFound}}, Updated: ${{elementsUpdated}}`);
+            console.log(`Total elements updated: ${{elementsUpdated}}`);
         }}
         
         function highlightProcessor(processorId) {{
@@ -519,14 +537,24 @@ fn main() {
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {{
+            console.log('DOMContentLoaded event fired');
+            console.log('inputData keys:', Object.keys(inputData));
+            console.log('outputData keys:', Object.keys(outputData));
+            
             if (Object.keys(inputData).length > 0 && Object.keys(outputData).length > 0) {{
+                console.log('Starting probability calculation...');
                 probabilities = calculateProbabilities(inputData, outputData);
+                console.log('Probability calculation completed');
                 
                 const slider = document.getElementById('wasteTypeSlider');
                 slider.max = inputData.N - 1;
                 
                 populateNodeSelector();
                 updateVisualization();
+            }} else {{
+                console.error('inputData or outputData is empty!');
+                console.log('inputData:', inputData);
+                console.log('outputData:', outputData);
             }}
         }});
     </script>
