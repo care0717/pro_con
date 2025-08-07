@@ -84,7 +84,7 @@ struct Source {
     ty: OutType,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct WeightedReachability {
     reachout: i32,
     distance_weight: f64,
@@ -247,6 +247,7 @@ fn build_network_greedy(graph: &Graph) -> (usize, Vec<String>) {
     );
     queue.push_back(nearest_sep);
     used_separators[nearest_sep] = true;
+    let mut counter = 0;
 
     // キューから分別器を処理（新しい貪欲法）
     while let Some(current_sep_idx) = queue.pop_front() {
@@ -261,10 +262,12 @@ fn build_network_greedy(graph: &Graph) -> (usize, Vec<String>) {
         let mut candidates = Vec::new();
 
         // 全ての処理装置への距離
-        for i in 0..graph.processor_positions.len() {
-            let device_pos = graph.processor_positions[i];
-            let dist = distance(current_pos, device_pos);
-            candidates.push((dist, i)); // NodeID: i (処理装置)
+        if counter > 10 {
+            for i in 0..graph.processor_positions.len() {
+                let device_pos = graph.processor_positions[i];
+                let dist = distance(current_pos, device_pos);
+                candidates.push((dist, i)); // NodeID: i (処理装置)
+            }
         }
 
         // 未使用の分別器への距離
@@ -313,6 +316,7 @@ fn build_network_greedy(graph: &Graph) -> (usize, Vec<String>) {
                 }
             }
         }
+        counter += 1;
     }
     // 構築完了後、処理装置に接続されていない分別器を繰り返し削除
     remove_disconnected_separators(&mut work_graph);
@@ -331,8 +335,15 @@ fn generate_configs_from_graph(graph: &Graph, work_graph: &Graph) -> Vec<String>
         let sep_node = graph.n + sep_idx;
 
         if let Some(out) = work_graph.edges.get(&sep_node) {
-            let best_sep =
-                select_best_separator_type(edges[&sep_node].clone(), graph.probabilities.clone());
+            let mut best_sep = 0;
+            if let Some(edges_sep) = edges.get(&sep_node) {
+                // 分別器の出力先の重み付き到達可能性を取得
+                let reachouts = edges_sep.clone();
+                // 確率行列を取得
+                let probabilities = graph.probabilities.clone();
+                // 最適な分別器タイプを選択
+                best_sep = select_best_separator_type(reachouts, probabilities);
+            }
             let v1 = out.out1;
             let v2 = out.out2;
             let separator_type = best_sep;
@@ -957,11 +968,11 @@ mod tests {
         let reachouts = &reachout_edges[&3];
 
         // 処理装置0にはout1で到達可能 -> +1
-        assert_eq!(reachouts[0], 1);
+        assert_eq!(reachouts[0].reachout, 1);
         // 処理装置1にはout2で到達可能 -> -1
-        assert_eq!(reachouts[1], -1);
+        assert_eq!(reachouts[1].reachout, -1);
         // 処理装置2には到達不可能 -> 0
-        assert_eq!(reachouts[2], 0);
+        assert_eq!(reachouts[2].reachout, 0);
     }
 
     #[test]
