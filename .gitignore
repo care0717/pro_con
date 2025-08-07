@@ -7,3 +7,6 @@
 target
 *.txt
 .env
+*.html
+*.svg
+*.png

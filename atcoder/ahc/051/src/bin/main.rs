@@ -1,4 +1,48 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::ops::RangeBounds;
+use std::time::{Duration, Instant};
+
+macro_rules! mat {
+	($($e:expr),*) => { Vec::from(vec![$($e),*]) };
+	($($e:expr,)*) => { Vec::from(vec![$($e),*]) };
+	($e:expr; $d:expr) => { Vec::from(vec![$e; $d]) };
+	($e:expr; $d:expr $(; $ds:expr)+) => { Vec::from(vec![mat![$e $(; $ds)*]; $d]) };
+}
+
+#[derive(Clone, Debug)]
+pub struct LibInput {
+    pub N: usize,
+    pub M: usize,
+    pub K: usize,
+    pub pos: Vec<(i64, i64)>,
+    pub ps: Vec<Vec<f64>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct LibOutput {
+    pub ds: Vec<usize>,
+    pub s: usize,
+    pub cs: Vec<(usize, usize, usize)>,
+}
+
+pub fn lib_read<T: Copy + PartialOrd + std::fmt::Display + std::str::FromStr, R: RangeBounds<T>>(
+    token: Option<&str>,
+    range: R,
+) -> Result<T, String> {
+    if let Some(v) = token {
+        if let Ok(v) = v.parse::<T>() {
+            if !range.contains(&v) {
+                Err(format!("Out of range: {}", v))
+            } else {
+                Ok(v)
+            }
+        } else {
+            Err(format!("Parse error: {}", v))
+        }
+    } else {
+        Err("Unexpected EOF".to_owned())
+    }
+}
 
 macro_rules! input {
     (source = $s:expr, $($r:tt)*) => {
@@ -93,7 +137,7 @@ struct WeightedReachability {
     distance_weight: f64,
 }
 
-// NodeIDから座標を取得
+// NodeIDから座標を取得 O(1)
 fn get_node_position(graph: &Graph, node_id: NodeId) -> Point {
     if node_id < graph.n {
         // 処理装置: 0 ~ n-1
@@ -112,7 +156,7 @@ fn get_node_position(graph: &Graph, node_id: NodeId) -> Point {
     }
 }
 
-// 2つのNodeID間の辺が交差するかチェック
+// 2つのNodeID間の辺が交差するかチェック O(1)
 fn edge_intersects(graph: &Graph, from1: NodeId, to1: NodeId, from2: NodeId, to2: NodeId) -> bool {
     let p1 = get_node_position(graph, from1);
     let p2 = get_node_position(graph, to1);
@@ -121,7 +165,7 @@ fn edge_intersects(graph: &Graph, from1: NodeId, to1: NodeId, from2: NodeId, to2
     segments_intersect(p1, p2, q1, q2)
 }
 
-// 新しい辺が既存の辺と交差するかチェック
+// 新しい辺が既存の辺と交差するかチェック O(|E|) where E = number of edges
 fn new_edge_intersects(graph: &Graph, from: NodeId, to: NodeId) -> bool {
     for (&existing_from, out) in &graph.edges {
         if edge_intersects(graph, from, to, existing_from, out.out1) {
@@ -134,12 +178,12 @@ fn new_edge_intersects(graph: &Graph, from: NodeId, to: NodeId) -> bool {
     false
 }
 
-// グラフに辺を追加
+// グラフに辺を追加 O(1)
 fn add_edge(graph: &mut Graph, from: NodeId, out1: NodeId, out2: NodeId) {
     graph.edges.insert(from, Out { out1, out2 });
 }
 
-// 線分交差判定
+// 線分交差判定 O(1)
 fn segments_intersect(p1: Point, p2: Point, q1: Point, q2: Point) -> bool {
     // 端点が同じ場合は交差していないとみなす
     if (p1.x == q1.x && p1.y == q1.y)
@@ -168,12 +212,14 @@ fn segments_intersect(p1: Point, p2: Point, q1: Point, q2: Point) -> bool {
     (o1 * o2 < 0) && (o3 * o4 < 0)
 }
 
+// 3点の向き（時計回り・反時計回り・一直線）を判定 O(1)
 fn orientation(a: Point, b: Point, c: Point) -> i32 {
     let cross = (b.x as i64 - a.x as i64) * (c.y as i64 - a.y as i64)
         - (b.y as i64 - a.y as i64) * (c.x as i64 - a.x as i64);
     sign(cross)
 }
 
+// 符号判定 O(1)
 fn sign(x: i64) -> i32 {
     if x > 0 {
         1
@@ -184,12 +230,14 @@ fn sign(x: i64) -> i32 {
     }
 }
 
+// 2点間のユークリッド距離を計算 O(1)
 fn distance(p1: Point, p2: Point) -> f64 {
     let dx = (p1.x - p2.x) as f64;
     let dy = (p1.y - p2.y) as f64;
     (dx * dx + dy * dy).sqrt()
 }
 
+// グラフを作成し、各分別器からの距離順配列を事前計算 O(m * (n + m) * log(n + m))
 fn create_graph(
     n: usize,
     m: usize,
@@ -237,31 +285,116 @@ fn create_graph(
     }
 }
 
+// 単一の解を生成する関数 O(m^2 * (n + m) + m * k * n)
 fn solve(
     n: usize,
     m: usize,
-    processor_positions: Vec<Point>,
-    separator_positions: Vec<Point>,
-    probabilities: Vec<Vec<f64>>,
-) -> (Vec<usize>, usize, Vec<String>) {
+    processor_positions: &Vec<Point>,
+    separator_positions: &Vec<Point>,
+    probabilities: &Vec<Vec<f64>>,
+) -> (Vec<usize>, usize, Vec<String>, Graph) {
     // 距離ベースの貪欲アルゴリズムでネットワークを構築（交差処理込み）
-    let mut graph = build_network_greedy(create_graph(
+    let graph = build_network_greedy(create_graph(
         n,
         m,
-        processor_positions,
-        separator_positions,
-        probabilities,
+        processor_positions.clone(),
+        separator_positions.clone(),
+        probabilities.clone(),
     ));
-    // 1本しか線がでいない分配器の接続
-    graph = connect_graph(&graph);
+    // out1==out2の分配器の接続改善
+    // graph = connect_graph(&graph);
+    // // 単一接続分別器の処理（追加）
+    // graph = connect_single_separators(&graph);
     // 最終的な設定をwork_graph.edgesから生成
     let configs = generate_configs_from_graph(&graph);
     // デバイス割り当ては単純に順番通り
     let device_assignments: Vec<usize> = (0..graph.n).collect();
 
-    (device_assignments, graph.start_node, configs)
+    (device_assignments, graph.start_node, configs, graph)
 }
 
+// キューベースのスコア計算関数
+fn calculate_score(
+    n: usize,
+    m: usize,
+    processor_positions: &Vec<Point>,
+    separator_positions: &Vec<Point>,
+    probabilities: &Vec<Vec<f64>>,
+    graph: &Graph,
+) -> i64 {
+    let mut probs = mat![0.0; n + m; n];
+
+    // デバイス割り当てをチェック（順番通り）
+    let device_assignments: Vec<usize> = (0..n).collect();
+
+    // スタートノードをチェック
+    let start_node = graph.start_node;
+
+    // キューベースの確率計算
+    let mut queue = VecDeque::new();
+    let mut visited = vec![false; n + m];
+
+    // 開始ノードの確率を1.0に設定
+    probs[start_node].fill(1.0);
+    queue.push_back(start_node);
+    visited[start_node] = true;
+
+    // 分別器の設定を取得
+    let configs = generate_configs_from_graph(graph);
+
+    while let Some(current) = queue.pop_front() {
+        if current >= n {
+            // 現在のノードが分別器の場合
+            let sep_idx = current - n;
+            if sep_idx < configs.len() {
+                let config = &configs[sep_idx];
+                if config != "-1" {
+                    let parts: Vec<&str> = config.split_whitespace().collect();
+                    if parts.len() == 3 {
+                        if let (Ok(k), Ok(v1), Ok(v2)) = (
+                            parts[0].parse::<usize>(),
+                            parts[1].parse::<usize>(),
+                            parts[2].parse::<usize>(),
+                        ) {
+                            if k < probabilities.len() && v1 < n + m && v2 < n + m {
+                                // 確率を分配
+                                for i in 0..n {
+                                    let current_prob = probs[current][i];
+                                    if current_prob > 0.0 {
+                                        probs[v1][i] += current_prob * probabilities[k][i];
+                                        probs[v2][i] += current_prob * (1.0 - probabilities[k][i]);
+                                    }
+                                }
+
+                                // 次のノードをキューに追加
+                                if !visited[v1] {
+                                    queue.push_back(v1);
+                                    visited[v1] = true;
+                                }
+                                if !visited[v2] {
+                                    queue.push_back(v2);
+                                    visited[v2] = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // スコア計算
+    let mut score = 0.0;
+    for i in 0..n {
+        let d = device_assignments[i];
+        let q = probs[i][d];
+        score += 1.0 - q;
+    }
+    score /= n as f64;
+    (1e9 * score).round() as i64
+}
+
+// 貪欲法でネットワークを構築 O(m^2 * |E|) where |E| = number of edges
 fn build_network_greedy(graph: Graph) -> Graph {
     let mut work_graph = graph.clone(); // 作業用のグラフ
     let mut used_separators = vec![false; graph.m];
@@ -368,7 +501,7 @@ fn build_network_greedy(graph: Graph) -> Graph {
     work_graph
 }
 
-// グラフにサイクルがあるかチェック
+// グラフにサイクルがあるかチェック（DFS） O(|V| + |E|)
 fn has_cycle(graph: &Graph) -> bool {
     let mut visited = std::collections::HashSet::new();
     let mut rec_stack = std::collections::HashSet::new();
@@ -424,18 +557,294 @@ fn has_cycle(graph: &Graph) -> bool {
     false
 }
 
-// 1本しか線がでいない分配器に対して、近くの点を見て自分が繋がっていない処理設備と繋がっている分配器を優先して接続してみる
+// out1==out2な分配器に対して、片方をランダムに近くの点を見て未接続の処理設備と繋がっている分配器を優先して接続 O(m * (n + m)^3)
 fn connect_graph(graph: &Graph) -> Graph {
     let mut work_graph = graph.clone();
+    // out1==out2の分別器を探す
+    let mut same_output_separators = Vec::new();
+    for sep_idx in 0..work_graph.m {
+        let sep_node = work_graph.n + sep_idx;
+        if let Some(Out { out1, out2 }) = work_graph.edges.get(&sep_node) {
+            if out1 == out2 {
+                same_output_separators.push(sep_node);
+            }
+        }
+    }
 
-    // 接続が1本しかない分別器を探す
+    // 各処理装置への到達可能性を計算
+    let reachouts = get_reachout_edge(&work_graph);
+
+    // 到達できていない処理装置を特定
+    let mut unreachable_processors = std::collections::HashSet::new();
+    for proc_idx in 0..work_graph.n {
+        let mut can_reach = false;
+        for sep_node in work_graph.n..(work_graph.n + work_graph.m) {
+            if let Some(edges_sep) = reachouts.get(&sep_node) {
+                if edges_sep[proc_idx].reachout > 0 {
+                    can_reach = true;
+                    break;
+                }
+            }
+        }
+        if !can_reach {
+            unreachable_processors.insert(proc_idx);
+        }
+    }
+
+    // out1==out2の分別器を処理
+    for &sep_node in &same_output_separators {
+        let sep_idx = sep_node - work_graph.n;
+        let current_outputs = work_graph.edges.get(&sep_node).cloned();
+
+        if let Some(Out {
+            out1: current_out1,
+            out2: current_out2,
+        }) = current_outputs
+        {
+            // 決定論的に出力を変更（sep_idxが偶数の場合out1、奇数の場合out2）
+            let change_out1 = (sep_idx % 2) == 0;
+
+            // 事前計算された距離順配列を使用して候補を取得
+            let mut candidates = Vec::new();
+
+            for &(node_id, distance) in &work_graph.separator_distance_sorted[sep_idx] {
+                // 現在の出力と同じものは除外
+                if node_id == current_out1 || node_id == current_out2 {
+                    continue;
+                }
+
+                if node_id < work_graph.n {
+                    // 処理装置の場合：未到達のものを優先
+                    let priority = if unreachable_processors.contains(&node_id) {
+                        0.0 // 最高優先度
+                    } else {
+                        distance
+                    };
+                    candidates.push((node_id, priority));
+                } else {
+                    // 分別器の場合：未接続の処理設備と繋がっているものを優先
+                    let mut connects_to_unreachable = false;
+                    if let Some(target_edges) = work_graph.edges.get(&node_id) {
+                        if (target_edges.out1 < work_graph.n
+                            && unreachable_processors.contains(&target_edges.out1))
+                            || (target_edges.out2 < work_graph.n
+                                && unreachable_processors.contains(&target_edges.out2))
+                        {
+                            connects_to_unreachable = true;
+                        }
+                    }
+
+                    let priority = if connects_to_unreachable {
+                        distance * 0.5 // 高優先度
+                    } else {
+                        distance
+                    };
+                    candidates.push((node_id, priority));
+                }
+            }
+
+            // 優先度順でソート
+            candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            // 新しい接続先を選択
+            // if let Some((new_target, _)) = candidates.first() {
+            for &(new_target, _) in &candidates {
+                let (new_out1, new_out2) = if change_out1 {
+                    (new_target, current_out2)
+                } else {
+                    (current_out1, new_target)
+                };
+
+                // 交差とサイクルをチェック
+                if !edge_intersects(&work_graph, sep_node, new_out1, sep_node, new_out2)
+                    && !new_edge_intersects(&work_graph, sep_node, new_out1)
+                    && !new_edge_intersects(&work_graph, sep_node, new_out2)
+                {
+                    // サイクルチェック
+                    let mut temp_graph = work_graph.clone();
+                    add_edge(&mut temp_graph, sep_node, new_out1, new_out2);
+
+                    if !has_cycle(&temp_graph) {
+                        add_edge(&mut work_graph, sep_node, new_out1, new_out2);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    remove_disconnected_separators(&mut work_graph); // 接続されていない分別器を削除
+    work_graph
+}
+
+// graph.edgesからconfigsを生成 O(m * k * n)
+fn generate_configs_from_graph(graph: &Graph) -> Vec<String> {
+    let mut configs = vec!["-1".to_string(); graph.m];
+    let edges = get_reachout_edge(graph);
+    // eprintln!("Edges: {:?}", edges);
+    for sep_idx in 0..graph.m {
+        let sep_node = graph.n + sep_idx;
+
+        if let Some(out) = graph.edges.get(&sep_node) {
+            let mut best_sep = 0;
+            if let Some(edges_sep) = edges.get(&sep_node) {
+                // 分別器の出力先の重み付き到達可能性を取得
+                let reachouts = edges_sep.clone();
+                // 確率行列を取得
+                let probabilities = graph.probabilities.clone();
+                // 最適な分別器タイプを選択
+                best_sep = select_best_separator_type(reachouts, probabilities);
+            }
+            let v1 = out.out1;
+            let v2 = out.out2;
+            let separator_type = best_sep;
+            configs[sep_idx] = format!("{} {} {}", separator_type, v1, v2);
+        }
+    }
+
+    configs
+}
+
+// 辺の交差処理 O(|E|)
+fn handle_edge_intersection(
+    graph: &Graph,
+    from: NodeId,
+    output1: Option<NodeId>,
+    output2: Option<NodeId>,
+) -> (NodeId, NodeId) {
+    let default_out = 0; // デフォルトは最初の処理装置
+
+    let out1 = output1.unwrap_or(default_out);
+    let out2 = output2.unwrap_or(out1);
+
+    // edge1の交差チェック
+    let edge1_intersects = new_edge_intersects(graph, from, out1);
+
+    // edge2の交差チェック
+    let edge2_intersects =
+        new_edge_intersects(graph, from, out2) || edge_intersects(graph, from, out1, from, out2);
+
+    // 交差状況に応じて処理
+    if !edge1_intersects && !edge2_intersects {
+        // 両方とも交差しない
+        (out1, out2)
+    } else if !edge1_intersects && edge2_intersects {
+        // edge1のみ有効、edge2は統合
+        (out1, out1)
+    } else if edge1_intersects && !edge2_intersects {
+        // edge2のみ有効
+        (out2, out2)
+    } else {
+        // 両方とも交差する場合は削除
+        (0, 0) // 削除マーカー
+    }
+}
+
+// 逆グラフを構築 O(|E|)
+fn build_reverse_graph(graph: &Graph) -> std::collections::HashMap<NodeId, Vec<Source>> {
+    let mut reverse_edges = std::collections::HashMap::new();
+
+    for (&from, out) in &graph.edges {
+        // out1への辺を追加
+        reverse_edges
+            .entry(out.out1)
+            .or_insert_with(Vec::new)
+            .push(Source {
+                id: from,
+                ty: OutType::Out1,
+            });
+
+        // out2への辺を追加
+        reverse_edges
+            .entry(out.out2)
+            .or_insert_with(Vec::new)
+            .push(Source {
+                id: from,
+                ty: OutType::Out2,
+            });
+    }
+    reverse_edges
+}
+
+// 処理装置に接続されていない分別器を検出（逆方向BFS） O(|V| + |E|)
+fn find_disconnected_separators(graph: &Graph) -> Vec<usize> {
+    let reverse_graph = build_reverse_graph(graph);
+
+    // 全ての分別器を最初は到達不可能として設定
+    let mut unreachable: std::collections::HashSet<usize> = (0..graph.m).collect();
+    let mut queue = std::collections::VecDeque::new();
+    let mut visited = std::collections::HashSet::new();
+
+    // 全ての処理装置をスタート地点として追加
+    for i in 0..graph.n {
+        queue.push_back(i);
+        visited.insert(i);
+    }
+
+    // 逆方向BFS
+    while let Some(current) = queue.pop_front() {
+        // 分別器の場合は到達可能なので unreachable から除去
+        if current >= graph.n && current < graph.n + graph.m {
+            let sep_idx = current - graph.n;
+            unreachable.remove(&sep_idx);
+        }
+
+        if let Some(predecessors) = reverse_graph.get(&current) {
+            for source in predecessors {
+                let predecessor = source.id;
+                if !visited.contains(&predecessor) {
+                    visited.insert(predecessor);
+                    queue.push_back(predecessor);
+                }
+            }
+        }
+    }
+
+    unreachable.into_iter().collect()
+}
+
+// 接続されていない分別器を削除 O(|V| + |E|)
+fn remove_disconnected_separators(graph: &mut Graph) {
+    let disconnected = find_disconnected_separators(graph);
+
+    for &sep_idx in &disconnected {
+        let sep_node = graph.n + sep_idx;
+
+        // この分別器から出る辺を削除
+        graph.edges.remove(&sep_node);
+
+        // この分別器への辺を削除
+        let nodes_to_update: Vec<NodeId> = graph.edges.keys().cloned().collect();
+        for node in nodes_to_update {
+            if let Some(out) = graph.edges.get_mut(&node) {
+                if out.out1 == sep_node && out.out2 == sep_node {
+                    // 両方とも削除された分別器を参照している場合はノード全体を削除
+                    graph.edges.remove(&node);
+                } else if out.out1 == sep_node {
+                    // out1のみ削除された分別器を参照している場合、out2に統一
+                    out.out1 = out.out2;
+                } else if out.out2 == sep_node {
+                    // out2のみ削除された分別器を参照している場合、out1に統一
+                    out.out2 = out.out1;
+                }
+            }
+        }
+    }
+}
+
+// 各分別器から各処理装置への重み付き到達可能性を計算（逆方向BFS） O(|V| * (|V| + |E|))
+
+// 追加の単一接続分別器の処理（元の実装を保持）
+fn connect_single_separators(graph: &Graph) -> Graph {
+    let mut work_graph = graph.clone();
+
+    // 未接続の分別器を探す
     let mut single_connected_separators = Vec::new();
     for sep_idx in 0..work_graph.m {
         let sep_node = work_graph.n + sep_idx;
-        if work_graph.edges.contains_key(&sep_node) {
-            continue; // 既に接続されている
+        if !work_graph.edges.contains_key(&sep_node) {
+            single_connected_separators.push(sep_node);
         }
-        single_connected_separators.push(sep_node);
     }
 
     // 各処理装置への到達可能性を計算
@@ -466,9 +875,6 @@ fn connect_graph(graph: &Graph) -> Graph {
         let mut candidates = Vec::new();
 
         for &(node_id, distance) in &work_graph.separator_distance_sorted[sep_idx] {
-            if candidates.len() >= 10 {
-                break;
-            }
             if node_id < work_graph.n {
                 // 処理装置の場合：未到達のものを優先
                 let priority = if unreachable_processors.contains(&node_id) {
@@ -508,7 +914,14 @@ fn connect_graph(graph: &Graph) -> Graph {
                 {
                     // サイクルチェック
                     let mut temp_graph = work_graph.clone();
-                    add_edge(&mut temp_graph, sep_node, candidate1, candidate2);
+                    temp_graph.edges.insert(
+                        sep_node,
+                        Out {
+                            out1: candidate1,
+                            out2: candidate2,
+                        },
+                    );
+
                     if !has_cycle(&temp_graph) {
                         best_out1 = Some(candidate1);
                         best_out2 = Some(candidate2);
@@ -521,168 +934,21 @@ fn connect_graph(graph: &Graph) -> Graph {
             }
         }
 
-        // 接続を追加
+        // エッジを追加
         if let (Some(out1), Some(out2)) = (best_out1, best_out2) {
-            add_edge(&mut work_graph, sep_node, out1, out2);
+            work_graph.edges.insert(
+                sep_node,
+                Out {
+                    out1: out1,
+                    out2: out2,
+                },
+            );
         }
     }
+
     remove_disconnected_separators(&mut work_graph); // 接続されていない分別器を削除
+
     work_graph
-}
-
-// graph.edgesからconfigsを生成
-fn generate_configs_from_graph(graph: &Graph) -> Vec<String> {
-    let mut configs = vec!["-1".to_string(); graph.m];
-    let edges = get_reachout_edge(graph);
-    // eprintln!("Edges: {:?}", edges);
-    for sep_idx in 0..graph.m {
-        let sep_node = graph.n + sep_idx;
-
-        if let Some(out) = graph.edges.get(&sep_node) {
-            let mut best_sep = 0;
-            if let Some(edges_sep) = edges.get(&sep_node) {
-                // 分別器の出力先の重み付き到達可能性を取得
-                let reachouts = edges_sep.clone();
-                // 確率行列を取得
-                let probabilities = graph.probabilities.clone();
-                // 最適な分別器タイプを選択
-                best_sep = select_best_separator_type(reachouts, probabilities);
-            }
-            let v1 = out.out1;
-            let v2 = out.out2;
-            let separator_type = best_sep;
-            configs[sep_idx] = format!("{} {} {}", separator_type, v1, v2);
-        }
-    }
-
-    configs
-}
-
-// 辺の交差処理
-fn handle_edge_intersection(
-    graph: &Graph,
-    from: NodeId,
-    output1: Option<NodeId>,
-    output2: Option<NodeId>,
-) -> (NodeId, NodeId) {
-    let default_out = 0; // デフォルトは最初の処理装置
-
-    let out1 = output1.unwrap_or(default_out);
-    let out2 = output2.unwrap_or(out1);
-
-    // edge1の交差チェック
-    let edge1_intersects = new_edge_intersects(graph, from, out1);
-
-    // edge2の交差チェック
-    let edge2_intersects =
-        new_edge_intersects(graph, from, out2) || edge_intersects(graph, from, out1, from, out2);
-
-    // 交差状況に応じて処理
-    if !edge1_intersects && !edge2_intersects {
-        // 両方とも交差しない
-        (out1, out2)
-    } else if !edge1_intersects && edge2_intersects {
-        // edge1のみ有効、edge2は統合
-        (out1, out1)
-    } else if edge1_intersects && !edge2_intersects {
-        // edge2のみ有効
-        (out2, out2)
-    } else {
-        // 両方とも交差する場合は削除
-        (0, 0) // 削除マーカー
-    }
-}
-
-// 逆グラフを構築
-fn build_reverse_graph(graph: &Graph) -> std::collections::HashMap<NodeId, Vec<Source>> {
-    let mut reverse_edges = std::collections::HashMap::new();
-
-    for (&from, out) in &graph.edges {
-        // out1への辺を追加
-        reverse_edges
-            .entry(out.out1)
-            .or_insert_with(Vec::new)
-            .push(Source {
-                id: from,
-                ty: OutType::Out1,
-            });
-
-        // out2への辺を追加
-        reverse_edges
-            .entry(out.out2)
-            .or_insert_with(Vec::new)
-            .push(Source {
-                id: from,
-                ty: OutType::Out2,
-            });
-    }
-    reverse_edges
-}
-
-// 処理装置に接続されていない分別器を検出
-fn find_disconnected_separators(graph: &Graph) -> Vec<usize> {
-    let reverse_graph = build_reverse_graph(graph);
-
-    // 全ての分別器を最初は到達不可能として設定
-    let mut unreachable: std::collections::HashSet<usize> = (0..graph.m).collect();
-    let mut queue = std::collections::VecDeque::new();
-    let mut visited = std::collections::HashSet::new();
-
-    // 全ての処理装置をスタート地点として追加
-    for i in 0..graph.n {
-        queue.push_back(i);
-        visited.insert(i);
-    }
-
-    // 逆方向BFS
-    while let Some(current) = queue.pop_front() {
-        // 分別器の場合は到達可能なので unreachable から除去
-        if current >= graph.n && current < graph.n + graph.m {
-            let sep_idx = current - graph.n;
-            unreachable.remove(&sep_idx);
-        }
-
-        if let Some(predecessors) = reverse_graph.get(&current) {
-            for source in predecessors {
-                let predecessor = source.id;
-                if !visited.contains(&predecessor) {
-                    visited.insert(predecessor);
-                    queue.push_back(predecessor);
-                }
-            }
-        }
-    }
-
-    unreachable.into_iter().collect()
-}
-
-// 接続されていない分別器を削除
-fn remove_disconnected_separators(graph: &mut Graph) {
-    let disconnected = find_disconnected_separators(graph);
-
-    for &sep_idx in &disconnected {
-        let sep_node = graph.n + sep_idx;
-
-        // この分別器から出る辺を削除
-        graph.edges.remove(&sep_node);
-
-        // この分別器への辺を削除
-        let nodes_to_update: Vec<NodeId> = graph.edges.keys().cloned().collect();
-        for node in nodes_to_update {
-            if let Some(out) = graph.edges.get_mut(&node) {
-                if out.out1 == sep_node && out.out2 == sep_node {
-                    // 両方とも削除された分別器を参照している場合はノード全体を削除
-                    graph.edges.remove(&node);
-                } else if out.out1 == sep_node {
-                    // out1のみ削除された分別器を参照している場合、out2に統一
-                    out.out1 = out.out2;
-                } else if out.out2 == sep_node {
-                    // out2のみ削除された分別器を参照している場合、out1に統一
-                    out.out2 = out.out1;
-                }
-            }
-        }
-    }
 }
 
 fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<WeightedReachability>> {
@@ -813,6 +1079,7 @@ fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<WeightedReachability>
     visited
 }
 
+// 最適な分別器タイプを選択 O(k * n)
 fn select_best_separator_type(
     reachouts: Vec<WeightedReachability>,
     probabilities: Vec<Vec<f64>>,
@@ -841,7 +1108,9 @@ fn select_best_separator_type(
     max_index
 }
 
+// メイン関数 O(solve() + input parsing)
 fn main() {
+    let start_time: Instant = Instant::now();
     input! {
         n: usize, m: usize, k: usize,
         device_locations: [(i32, i32); n],
@@ -857,14 +1126,38 @@ fn main() {
         .into_iter()
         .map(|(x, y)| Point { x, y })
         .collect();
-    let (device_assignments, start_node, separator_configs) = solve(
-        n,
-        m,
-        processor_positions,
-        separator_positions,
-        probabilities,
-    );
 
+    let time_limit = Duration::from_millis(1500); // 2秒の時間制限
+
+    let mut best_score = f64::MAX;
+    let mut best_solution = ((0..n).collect::<Vec<usize>>(), 0, vec!["-1".to_string(); m]);
+
+    while start_time.elapsed() < time_limit {
+        let (device_assignments, start_node, separator_configs, graph) = solve(
+            n,
+            m,
+            &processor_positions,
+            &separator_positions,
+            &probabilities,
+        );
+        let built_graph = build_network_greedy(graph);
+
+        let score = calculate_score(
+            n,
+            m,
+            &processor_positions,
+            &separator_positions,
+            &probabilities,
+            &built_graph,
+        );
+
+        if score as f64 <= best_score {
+            best_score = score as f64;
+            best_solution = (device_assignments, start_node, separator_configs);
+        }
+    }
+
+    let (device_assignments, start_node, separator_configs) = best_solution;
     print!(
         "{}",
         device_assignments
