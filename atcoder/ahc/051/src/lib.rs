@@ -4,7 +4,9 @@ use itertools::Itertools;
 use proconio::input;
 use rand::prelude::*;
 use std::{collections::VecDeque, ops::RangeBounds};
-use svg::node::element::{Circle, Definitions, Group, Line, Marker, Polygon, Rectangle, Style, Title};
+use svg::node::element::{
+    Circle, Definitions, Group, Line, Marker, Polygon, Rectangle, Style, Title,
+};
 
 pub trait SetMinMax {
     fn setmin(&mut self, v: Self) -> bool;
@@ -387,7 +389,7 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
         .add(
             Polygon::new()
                 .set("points", "0 0, 4 1.5, 0 3")
-                .set("fill", "currentColor")
+                .set("fill", "currentColor"),
         );
 
     let defs = Definitions::new().add(arrow_marker);
@@ -535,18 +537,27 @@ pub fn vis(input: &Input, out: &Output, target: usize) -> (i64, String, String) 
     }
     for i in 0..input.N {
         let pr = if target == !0 { 1.0 } else { probs[i][target] };
-        let d = out.ds[i];
+        
+        // この処理施設iがどのゴミ種類を担当するかを逆引き
+        let assigned_waste_type = out.ds.iter().position(|&processor_id| processor_id == i);
+        
         doc = doc.add(
             group(if target == !0 {
-                format!("vertex: {} (processor {})", i, d)
+                match assigned_waste_type {
+                    Some(waste_type) => format!("vertex: {} (processes waste {})", i, waste_type),
+                    None => format!("vertex: {} (no waste assigned)", i),
+                }
             } else {
-                format!("vertex: {} (processor {})\nprob = {}", i, d, pr)
+                match assigned_waste_type {
+                    Some(waste_type) => format!("vertex: {} (processes waste {})\nprob = {}", i, waste_type, pr),
+                    None => format!("vertex: {} (no waste assigned)\nprob = {}", i, pr),
+                }
             })
             .add(
                 Circle::new()
                     .set("cx", get_x(input.pos[i]))
                     .set("cy", get_y(input.pos[i]))
-                    .set("r", if d == target { 6 } else { 4 })
+                    .set("r", if assigned_waste_type == Some(target) { 6 } else { 4 })
                     .set("class", "processor-node"),
             ),
         );

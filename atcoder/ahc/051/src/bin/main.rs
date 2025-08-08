@@ -256,7 +256,7 @@ fn solve(
     processor_positions: &Vec<Point>,
     separator_positions: &Vec<Point>,
     probabilities: &Vec<Vec<f64>>,
-) -> (Vec<usize>, usize, Vec<String>, Graph) {
+) -> Graph {
     // 距離ベースの貪欲アルゴリズムでネットワークを構築（交差処理込み）
     let mut graph = build_network_greedy(create_graph(
         n,
@@ -270,11 +270,7 @@ fn solve(
     // // 単一接続分別器の処理（追加）
     // graph = connect_single_separators(&graph);
     // 最終的な設定をwork_graph.edgesから生成
-    let configs = generate_configs_from_graph(&graph);
-    // デバイス割り当ては単純に順番通り
-    let device_assignments: Vec<usize> = (0..graph.n).collect();
-
-    (device_assignments, graph.start_node, configs, graph)
+    graph
 }
 
 fn build_processor_probabilities(
@@ -286,24 +282,43 @@ fn build_processor_probabilities(
 ) -> Vec<Vec<f64>> {
     let mut probs = mat![0.0; n + m; n];
 
-    // スタートノードをチェック
-    let start_node = graph.start_node;
+    // グラフの隣接リスト構築（compute_score_detailsと同じロジック）
+    let mut g = vec![vec![]; n + m];
 
-    // キューベースの確率計算
-    let mut queue = VecDeque::new();
-    let mut visited = vec![false; n + m];
+    // 分別器設定をパースしてグラフ構築
+    for (sep_idx, config) in configs.iter().enumerate() {
+        if config != "-1" {
+            let parts: Vec<&str> = config.split_whitespace().collect();
+            if parts.len() == 3 {
+                if let (Ok(_k), Ok(v1), Ok(v2)) = (
+                    parts[0].parse::<usize>(),
+                    parts[1].parse::<usize>(),
+                    parts[2].parse::<usize>(),
+                ) {
+                    if v1 < n + m && v2 < n + m {
+                        let sep_node = n + sep_idx;
+                        g[sep_node].push(v1);
+                        g[sep_node].push(v2);
+                    }
+                }
+            }
+        }
+    }
 
-    // 開始ノードの確率を1.0に設定
-    probs[start_node].fill(1.0);
-    queue.push_back(start_node);
-    visited[start_node] = true;
+    // トポロジカルソート（compute_score_detailsと同じ関数を使用）
+    let Some(order) = topological_sort(&g) else {
+        eprintln!("Warning: Graph contains a cycle in build_processor_probabilities");
+        return probs;
+    };
 
-    // 分別器の設定を取得
+    // スタートノードに全ゴミ種類の確率1.0を設定（compute_score_detailsと同じ）
+    probs[graph.start_node].fill(1.0);
 
-    while let Some(current) = queue.pop_front() {
-        if current >= n {
-            // 現在のノードが分別器の場合
-            let sep_idx = current - n;
+    // トポロジカル順序で確率を伝播（compute_score_detailsと同じロジック）
+    for u in order {
+        if u >= n {
+            // 分別器ノードの処理
+            let sep_idx = u - n;
             if sep_idx < configs.len() {
                 let config = &configs[sep_idx];
                 if config != "-1" {
@@ -315,23 +330,10 @@ fn build_processor_probabilities(
                             parts[2].parse::<usize>(),
                         ) {
                             if k < probabilities.len() && v1 < n + m && v2 < n + m {
-                                // 確率を分配
+                                // compute_score_detailsと同じ確率計算
                                 for i in 0..n {
-                                    let current_prob = probs[current][i];
-                                    if current_prob > 0.0 {
-                                        probs[v1][i] += current_prob * probabilities[k][i];
-                                        probs[v2][i] += current_prob * (1.0 - probabilities[k][i]);
-                                    }
-                                }
-
-                                // 次のノードをキューに追加
-                                if !visited[v1] {
-                                    queue.push_back(v1);
-                                    visited[v1] = true;
-                                }
-                                if !visited[v2] {
-                                    queue.push_back(v2);
-                                    visited[v2] = true;
+                                    probs[v1][i] += probs[u][i] * probabilities[k][i];
+                                    probs[v2][i] += probs[u][i] * (1.0 - probabilities[k][i]);
                                 }
                             }
                         }
@@ -343,7 +345,73 @@ fn build_processor_probabilities(
 
     probs
 }
-// キューベースのスコア計算関数
+
+// lib.rsのtopological_sort関数と同じ実装
+fn topological_sort(adj: &Vec<Vec<usize>>) -> Option<Vec<usize>> {
+    let n = adj.len();
+    let mut in_deg = vec![0; n];
+    for u in 0..n {
+        for &v in &adj[u] {
+            in_deg[v] += 1;
+        }
+    }
+    let mut queue = VecDeque::new();
+    for u in 0..n {
+        if in_deg[u] == 0 {
+            queue.push_back(u);
+        }
+    }
+    let mut order = Vec::with_capacity(n);
+    while let Some(u) = queue.pop_front() {
+        order.push(u);
+        for &v in &adj[u] {
+            in_deg[v] -= 1;
+            if in_deg[v] == 0 {
+                queue.push_back(v);
+            }
+        }
+    }
+    if order.len() == n {
+        Some(order)
+    } else {
+        None
+    }
+}
+
+// 処理装置への流入確率に基づいて最適なデバイス割り当てを生成
+fn generate_optimal_device_assignments(
+    n: usize,
+    processor_probabilities: &Vec<Vec<f64>>,
+) -> Vec<usize> {
+    let mut assignments = vec![0; n]; // ゴミ種類 -> 処理装置のマッピング
+
+    // (確率, ゴミ種類, 処理装置ID) のタプルを作成
+    let mut probability_pairs = Vec::new();
+    for processor_id in 0..n {
+        for waste_type in 0..n {
+            let prob = processor_probabilities[processor_id][waste_type];
+            probability_pairs.push((prob, waste_type, processor_id));
+        }
+    }
+
+    // 確率でソート（降順）
+    probability_pairs.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut used_processors = vec![false; n]; // すでに割り当て済みの処理装置
+    let mut assigned_wastes = vec![false; n]; // すでに割り当て済みのゴミ種類
+
+    // 確率の高い順に割り当てを行う
+    for (_, waste_type, processor_id) in probability_pairs {
+        // まだ割り当てられていないゴミ種類で、まだ使用されていない処理装置の場合
+        if !assigned_wastes[waste_type] && !used_processors[processor_id] {
+            assignments[waste_type] = processor_id;
+            used_processors[processor_id] = true;
+            assigned_wastes[waste_type] = true;
+        }
+    }
+
+    assignments
+}
 fn calculate_score(
     n: usize,
     m: usize,
@@ -643,7 +711,10 @@ fn connect_graph(graph: &Graph) -> Graph {
 // graph.edgesからconfigsを生成 O(m * k * n)
 fn generate_configs_from_graph(graph: &Graph) -> Vec<String> {
     let mut configs = vec!["-1".to_string(); graph.m];
-    let (edges, can_reach) = get_reachout_edge(graph);
+
+    // 新しい分別器タイプ選択関数を使用
+    // let separator_types = select_best_separator_type2(graph, &graph.probabilities);
+    let (edges, _) = get_reachout_edge(graph);
 
     for sep_idx in 0..graph.m {
         let sep_node = graph.n + sep_idx;
@@ -916,6 +987,112 @@ fn get_reachout_edge(
     (visited, can_reach)
 }
 
+// グラフをトポロジカルソートしてスタートから順番にノードをたどりながら、各probabilitiesに対して、次の出力先へ一番ゴミの種類に対してmax-secound_maxが大きくなるように分配器の種類を選んでいく
+fn select_best_separator_type2(
+    graph: &Graph,
+    probabilities: &Vec<Vec<f64>>,
+) -> HashMap<NodeId, usize> {
+    let mut separator_types = HashMap::new();
+    let mut queue = std::collections::VecDeque::new();
+    let mut visited: HashMap<NodeId, Vec<f64>> = std::collections::HashMap::new();
+    let mut processed = std::collections::HashSet::new();
+
+    // スタートノードから開始
+    visited.insert(graph.start_node, vec![1.0; graph.n]);
+    queue.push_back(graph.start_node);
+
+    while let Some(current) = queue.pop_front() {
+        if processed.contains(&current) {
+            continue;
+        }
+        processed.insert(current);
+
+        // 現在のノードの確率を取得
+        let current_probs = visited.get(&current).unwrap().clone();
+
+        // 現在のノードから出力される場合のみ処理
+        if let Some(out) = graph.edges.get(&current) {
+            // 分別器の場合、最適な分別器タイプを選択
+            if current >= graph.n {
+                let mut best_sep_type = 0;
+                let mut best_separation_score = -1.0;
+
+                // 全ての分別器タイプを試す
+                for (sep_type, prob_vec) in probabilities.iter().enumerate() {
+                    let mut total_separation = 0.0;
+
+                    // 各ゴミ種類について分離度を計算
+                    for waste_type in 0..graph.n {
+                        let current_waste_prob = current_probs[waste_type];
+                        if current_waste_prob > 0.0 {
+                            let out1_prob = current_waste_prob * prob_vec[waste_type];
+                            let out2_prob = current_waste_prob * (1.0 - prob_vec[waste_type]);
+
+                            // out1とout2の確率差を分離度として加算
+                            total_separation += (out1_prob - out2_prob).abs();
+                        }
+                    }
+
+                    if total_separation > best_separation_score {
+                        best_separation_score = total_separation;
+                        best_sep_type = sep_type;
+                    }
+                }
+
+                separator_types.insert(current, best_sep_type);
+
+                // 選択された分別器タイプで次のノードの確率を計算
+                let best_prob_vec = &probabilities[best_sep_type];
+                let mut out1_probs = vec![0.0; graph.n];
+                let mut out2_probs = vec![0.0; graph.n];
+
+                for waste_type in 0..graph.n {
+                    out1_probs[waste_type] = current_probs[waste_type] * best_prob_vec[waste_type];
+                    out2_probs[waste_type] =
+                        current_probs[waste_type] * (1.0 - best_prob_vec[waste_type]);
+                }
+
+                // 出力先ノードに確率を伝播
+                if let Some(existing_probs) = visited.get_mut(&out.out1) {
+                    for waste_type in 0..graph.n {
+                        existing_probs[waste_type] += out1_probs[waste_type];
+                    }
+                } else {
+                    visited.insert(out.out1, out1_probs);
+                }
+
+                if let Some(existing_probs) = visited.get_mut(&out.out2) {
+                    for waste_type in 0..graph.n {
+                        existing_probs[waste_type] += out2_probs[waste_type];
+                    }
+                } else {
+                    visited.insert(out.out2, out2_probs);
+                }
+
+                // 次のノードをキューに追加
+                if !processed.contains(&out.out1) {
+                    queue.push_back(out.out1);
+                }
+                if !processed.contains(&out.out2) {
+                    queue.push_back(out.out2);
+                }
+            } else {
+                // 処理装置の場合はそのまま次のノードをキューに追加（分別器への接続がある場合）
+                if !processed.contains(&out.out1) {
+                    visited.insert(out.out1, current_probs.clone());
+                    queue.push_back(out.out1);
+                }
+                if out.out1 != out.out2 && !processed.contains(&out.out2) {
+                    visited.insert(out.out2, current_probs.clone());
+                    queue.push_back(out.out2);
+                }
+            }
+        }
+    }
+
+    separator_types
+}
+
 // 最適な分別器タイプを選択 O(k * n)
 fn select_best_separator_type(
     reachouts: Vec<WeightedReachability>,
@@ -944,7 +1121,6 @@ fn select_best_separator_type(
     }
     max_index
 }
-
 // メイン関数 O(solve() + input parsing)
 fn main() {
     let start_time: Instant = Instant::now();
@@ -967,17 +1143,21 @@ fn main() {
     let time_limit = Duration::from_millis(1500); // 1.5秒の時間制限
 
     // まず一度だけsolveを実行してグラフを構築
-    let (initial_device_assignments, start_node, separator_configs, graph) = solve(
+    let graph = solve(
         n,
         m,
         &processor_positions,
         &separator_positions,
         &probabilities,
     );
-
+    let separator_configs = generate_configs_from_graph(&graph);
     // 各処理装置への累積流入確率を事前計算
     let processor_probabilities =
         build_processor_probabilities(n, m, &probabilities, &graph, &separator_configs);
+
+    // 確率に基づいて最適なデバイス割り当てを生成
+    let initial_device_assignments =
+        generate_optimal_device_assignments(n, &processor_probabilities);
 
     let mut best_score =
         calculate_score(n, m, &processor_probabilities, &initial_device_assignments);
@@ -1009,7 +1189,7 @@ fn main() {
             .join(" ")
     );
     println!();
-    println!("{}", start_node);
+    println!("{}", graph.start_node);
 
     for config in separator_configs {
         println!("{}", config);
@@ -1151,31 +1331,88 @@ mod tests {
 
     #[test]
     fn test_select_best_separator_type() {
-        // 簡単な例：3つの処理装置、2つの分別器タイプ
-        let reachouts = vec![
-            WeightedReachability {
-                reachout: 1,
-                distance_weight: 1.0,
-            }, // 処理装置0
-            WeightedReachability {
-                reachout: -1,
-                distance_weight: 1.0,
-            }, // 処理装置1
-            WeightedReachability {
-                reachout: 1,
-                distance_weight: 1.0,
-            }, // 処理装置2
-        ];
-        let probabilities = vec![
-            vec![0.9, 0.1, 0.8], // タイプ0: 処理装置0,2に高確率、処理装置1に低確率
-            vec![0.1, 0.9, 0.2], // タイプ1: 処理装置1に高確率、処理装置0,2に低確率
+        // 簡単なグラフを作成してテスト
+        let mut graph = create_test_graph();
+
+        // グラフに分別器を追加
+        add_edge(&mut graph, 3, 0, 1); // 分別器0 -> 処理装置0, 処理装置1
+
+        // 分別器タイプを選択
+        let separator_types = select_best_separator_type(&graph, &graph.probabilities);
+
+        // 分別器3（ノードID）に対してタイプが選択されることを確認
+        assert!(separator_types.contains_key(&3));
+        let selected_type = separator_types[&3];
+        assert!(selected_type < graph.probabilities.len());
+    }
+
+    #[test]
+    fn test_generate_optimal_device_assignments() {
+        // 3つの処理装置、3つのゴミ種類のテスト
+        let processor_probabilities = vec![
+            vec![0.8, 0.1, 0.1], // 処理装置0: ゴミ種類0に高確率
+            vec![0.1, 0.9, 0.0], // 処理装置1: ゴミ種類1に高確率
+            vec![0.1, 0.0, 0.9], // 処理装置2: ゴミ種類2に高確率
+            // 分別器のデータ（使用されない）
+            vec![0.0, 0.0, 0.0],
+            vec![0.0, 0.0, 0.0],
         ];
 
-        let best_type = select_best_separator_type(reachouts, probabilities);
-        // タイプ0の期待値: 0.9*1.0 + (1-0.1)*1.0 + 0.8*1.0 = 2.6
-        // タイプ1の期待値: 0.1*1.0 + 0.9*1.0 + 0.2*1.0 = 1.2
-        // タイプ0の方が高いはず
-        assert_eq!(best_type, 0);
+        let assignments = generate_optimal_device_assignments(3, &processor_probabilities);
+
+        // 確率でソートした結果：
+        // (0.9, waste1, processor1) -> assignments[1] = 1
+        // (0.9, waste2, processor2) -> assignments[2] = 2
+        // (0.8, waste0, processor0) -> assignments[0] = 0
+
+        assert_eq!(assignments[0], 0); // ゴミ種類0 -> 処理装置0
+        assert_eq!(assignments[1], 1); // ゴミ種類1 -> 処理装置1
+        assert_eq!(assignments[2], 2); // ゴミ種類2 -> 処理装置2
+
+        // 全ての処理装置が一意に割り当てられていることを確認
+        let mut used = vec![false; 3];
+        for &processor in &assignments {
+            assert!(
+                !used[processor],
+                "処理装置{}が重複して割り当てられています",
+                processor
+            );
+            used[processor] = true;
+        }
+    }
+
+    #[test]
+    fn test_generate_optimal_device_assignments_conflict() {
+        // 競合がある場合のテスト：2つのゴミ種類が同じ処理装置を最も好む場合
+        let processor_probabilities = vec![
+            vec![0.9, 0.8, 0.1], // 処理装置0: ゴミ種類0,1両方に高確率
+            vec![0.1, 0.1, 0.7], // 処理装置1: ゴミ種類2に高確率
+            vec![0.0, 0.1, 0.2], // 処理装置2: 低確率
+        ];
+
+        let assignments = generate_optimal_device_assignments(3, &processor_probabilities);
+
+        // 確率でソートした結果、最も高い確率から割り当てられる：
+        // (0.9, waste0, processor0) が最初に選ばれる
+        // (0.8, waste1, processor0) は processor0 が既に使用済みなのでスキップ
+        // (0.7, waste2, processor1) が次に選ばれる
+        // waste1 は残った processor2 に割り当てられる
+
+        assert_eq!(assignments.len(), 3);
+
+        // 全ての処理装置が一意に割り当てられていることを確認
+        let mut used = vec![false; 3];
+        for &processor in &assignments {
+            assert!(
+                !used[processor],
+                "処理装置{}が重複して割り当てられています",
+                processor
+            );
+            used[processor] = true;
+        }
+
+        // 全てのゴミ種類が割り当てられていることを確認
+        assert_eq!(used, vec![true, true, true]);
     }
 
     #[test]
@@ -1278,23 +1515,34 @@ mod tests {
 
     #[test]
     fn test_solve_basic() {
-        let graph = create_test_graph();
-        let (device_assignments, start_node, separator_configs) = solve(
-            graph.n,
-            graph.m,
-            graph.processor_positions.clone(),
-            graph.separator_positions.clone(),
-            graph.probabilities.clone(),
+        let test_graph = create_test_graph();
+        let graph = solve(
+            test_graph.n,
+            test_graph.m,
+            &test_graph.processor_positions,
+            &test_graph.separator_positions,
+            &test_graph.probabilities,
         );
 
-        // デバイス割り当てチェック
-        assert_eq!(device_assignments, vec![0, 1, 2]);
+        let separator_configs = generate_configs_from_graph(&graph);
+        let processor_probabilities = build_processor_probabilities(
+            test_graph.n,
+            test_graph.m,
+            &test_graph.probabilities,
+            &graph,
+            &separator_configs,
+        );
+        let device_assignments =
+            generate_optimal_device_assignments(test_graph.n, &processor_probabilities);
+
+        // デバイス割り当てのサイズチェック
+        assert_eq!(device_assignments.len(), test_graph.n);
 
         // スタートノードは分別器の範囲内
-        assert!(start_node >= graph.n && start_node < graph.n + graph.m);
+        assert!(graph.start_node >= test_graph.n && graph.start_node < test_graph.n + test_graph.m);
 
         // 設定の数が分別器の数と一致
-        assert_eq!(separator_configs.len(), graph.m);
+        assert_eq!(separator_configs.len(), test_graph.m);
     }
 
     #[test]

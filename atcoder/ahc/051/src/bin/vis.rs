@@ -50,9 +50,18 @@ fn main() {
     });
     let input = parse_input(&input);
     let out = parse_output(&input, &output);
-    let (score, err, svg) = match &out {
-        Ok(out) => vis_default(&input, &out),
-        Err(err) => (0, err.clone(), String::new()),
+    let (score, err, svg, probabilities_matrix) = match &out {
+        Ok(out) => {
+            let (score, err, svg) = vis_default(&input, &out);
+            let (_, _, probs) = tools::compute_score_details(&input, &out);
+            (score, err, svg, probs)
+        }
+        Err(err) => (
+            0,
+            err.clone(),
+            String::new(),
+            vec![vec![0.0; input.N]; input.N + input.M],
+        ),
     };
     let input_json = serde_json::to_string(&input).unwrap_or_else(|_| "{}".to_string());
     let output_json = match out {
@@ -67,6 +76,8 @@ fn main() {
             }
         }
     };
+    let probabilities_json =
+        serde_json::to_string(&probabilities_matrix).unwrap_or_else(|_| "[]".to_string());
     if err.len() > 0 {
         println!("{}", err);
         println!("Score = {}", 0);
@@ -96,6 +107,7 @@ fn main() {
         .main-content {{ display: flex; gap: 20px; }}
         .svg-container {{ border: 2px solid #ddd; border-radius: 8px; overflow: hidden; flex: 1; }}
         .info-panel {{ width: 400px; background-color: #f8f9fa; border: 2px solid #dee2e6; border-radius: 8px; padding: 15px; max-height: 600px; overflow-y: auto; }}
+        .distribution-panel {{ width: 300px; background-color: #f8f9fa; border: 2px solid #dee2e6; border-radius: 8px; padding: 15px; max-height: 600px; overflow-y: auto; }}
         .highlighted {{ stroke-width: 4 !important; }}
     </style>
 </head>
@@ -121,11 +133,6 @@ fn main() {
         </div>
         
         <div class="info">
-            <div class="legend">
-                <span>通過確率:</span>
-                <div class="color-box" style="background: linear-gradient(to right, #1e90ff, #ff6347);"></div>
-                <span>低 (青) → 高 (赤)</span>
-            </div>
             <div id="scoreInfo">スコア: {}</div>
             <div id="probInfo"></div>
         </div>
@@ -133,6 +140,10 @@ fn main() {
         <div class="main-content">
             <div class="svg-container" id="svgContainer">
                 {}
+            </div>
+            <div class="distribution-panel">
+                <h3>ゴミ配分情報</h3>
+                <div id="distributionInfo">ゴミ種類を選択してください</div>
             </div>
             <div class="info-panel">
                 <h3>ノード詳細情報</h3>
@@ -152,83 +163,18 @@ fn main() {
         try {{
             Object.assign(inputData, {2});
             Object.assign(outputData, {3});
+            // Rust側で計算済みの正確な確率を使用
+            probabilities = {4};
             console.log('JSON data assigned successfully');
             console.log('inputData after assignment:', inputData);
             console.log('outputData after assignment:', outputData);
+            console.log('Precomputed probabilities:', probabilities);
         }} catch (error) {{
             console.error('Error parsing JSON data:', error);
         }}
         
-        function calculateProbabilities(input, output) {{
-            console.log('calculateProbabilities called');
-            console.log('Input data:', input);
-            console.log('Output data:', output);
-            
-            const probs = {{}};
-            const N = input.N;
-            const M = input.M;
-            
-            console.log(`N: ${{N}}, M: ${{M}}, start node: ${{output.s}}`);
-            
-            // 各ゴミ種類の確率を計算
-            for (let wasteType = 0; wasteType < N; wasteType++) {{
-                probs[wasteType] = {{}};
-                
-                // 全ノードの確率を初期化
-                for (let i = 0; i < N + M; i++) {{
-                    probs[wasteType][i] = 0.0;
-                }}
-                
-                // 開始ノードの確率を1.0に設定
-                probs[wasteType][output.s] = 1.0;
-                console.log(`Set start node ${{output.s}} probability to 1.0 for waste type ${{wasteType}}`);
-                
-                // BFS的にネットワークを辿って確率を伝播
-                const processed = new Set();
-                const toProcess = [output.s];
-                
-                while (toProcess.length > 0) {{
-                    const node = toProcess.shift();
-                    if (processed.has(node)) continue;
-                    
-                    const nodeProb = probs[wasteType][node];
-                    if (nodeProb === 0) continue;
-                    
-                    processed.add(node);
-                    console.log(`Processing node ${{node}} for waste type ${{wasteType}}, prob: ${{nodeProb}}`);
-                    
-                    if (node >= N) {{ // 分別器ノード
-                        const sepIndex = node - N;
-                        if (sepIndex < output.cs.length && output.cs[sepIndex][0] !== 4294967295) {{ // !0 in Rust is max u32
-                            const sortType = output.cs[sepIndex][0];
-                            const v1 = output.cs[sepIndex][1];
-                            const v2 = output.cs[sepIndex][2];
-                            
-                            if (sortType < input.ps.length && wasteType < input.ps[sortType].length) {{
-                                const prob1 = input.ps[sortType][wasteType];
-                                const prob2 = 1.0 - prob1;
-                                
-                                // 確率を伝播
-                                probs[wasteType][v1] += nodeProb * prob1;
-                                probs[wasteType][v2] += nodeProb * prob2;
-                                
-                                console.log(`Separator ${{node}} (type ${{sortType}}) -> v1: ${{v1}} (prob: ${{prob1 * nodeProb}}), v2: ${{v2}} (prob: ${{prob2 * nodeProb}})`);
-                                
-                                // 次の処理対象に追加
-                                if (!processed.has(v1)) toProcess.push(v1);
-                                if (!processed.has(v2)) toProcess.push(v2);
-                            }}
-                        }}
-                    }}
-                }}
-            }}
-            
-            console.log('Final probabilities:', probs);
-            return probs;
-        }}
-        
         function getColor(probability) {{
-            // 確率0-1を0-100に変換して整数にする
+            // 確率0-1を正規化
             const p = Math.max(0, Math.min(1, probability));
             
             let r, g, b;
@@ -236,15 +182,15 @@ fn main() {
             if (p <= 0.5) {{
                 // 0.0-0.5: 青 → 緑
                 const t = p * 2; // 0-1に正規化
-                r = Math.round(0 * (1 - t) + 0 * t);
-                g = Math.round(0 * (1 - t) + 255 * t);
-                b = Math.round(255 * (1 - t) + 0 * t);
+                r = Math.round(30 * (1 - t) + 0 * t);
+                g = Math.round(144 * (1 - t) + 255 * t);
+                b = Math.round(255 * (1 - t) + 30 * t);
             }} else {{
                 // 0.5-1.0: 緑 → 赤
                 const t = (p - 0.5) * 2; // 0-1に正規化
                 r = Math.round(0 * (1 - t) + 255 * t);
-                g = Math.round(255 * (1 - t) + 0 * t);
-                b = Math.round(0 * (1 - t) + 0 * t);
+                g = Math.round(255 * (1 - t) + 30 * t);
+                b = Math.round(30 * (1 - t) + 70 * t);
             }}
             
             return `rgb(${{r}}, ${{g}}, ${{b}})`;
@@ -253,8 +199,8 @@ fn main() {
         function calculateEdgeProbability(wasteType, separatorType, output, startNode, endNode) {{
             console.log(`calculateEdgeProbability: wasteType=${{wasteType}}, sepType=${{separatorType}}, output=${{output}}, start=${{startNode}}, end=${{endNode}}`);
             
-            // 始点への到達確率を取得
-            const startProb = probabilities[wasteType] && probabilities[wasteType][startNode] ? probabilities[wasteType][startNode] : 0;
+            // 始点への到達確率を取得 (構造: probabilities[ノードID][ゴミ種類])
+            const startProb = probabilities[startNode] && probabilities[startNode][wasteType] ? probabilities[startNode][wasteType] : 0;
             console.log(`Start node ${{startNode}} probability: ${{startProb}}`);
             
             if (startProb === 0) {{
@@ -298,6 +244,7 @@ fn main() {
             if (wasteType === -1) {{
                 valueDisplay.textContent = '全体表示';
                 probInfo.textContent = '';
+                document.getElementById('distributionInfo').innerHTML = 'ゴミ種類を選択してください';
                 resetVisualization();
                 return;
             }}
@@ -313,9 +260,39 @@ fn main() {
             
             // 対応する処理装置を取得
             const correctProcessor = outputData.ds[wasteType];
-            const successProb = probabilities[wasteType] && probabilities[wasteType][correctProcessor] ? probabilities[wasteType][correctProcessor] : 0;
+            const successProb = probabilities[correctProcessor] && probabilities[correctProcessor][wasteType] ? probabilities[correctProcessor][wasteType] : 0;
             
+            // 上部の情報エリアには簡潔な情報を表示
             probInfo.innerHTML = `<strong>ゴミ種類 ${{wasteType}}</strong> → 処理装置 ${{correctProcessor}} (成功確率: ${{(successProb * 100).toFixed(1)}}%)`;
+            
+            // 配分パネルに詳細な配分情報を表示
+            const distributionPanel = document.getElementById('distributionInfo');
+            let distributionContent = `<strong>ゴミ種類 ${{wasteType}}</strong> の配分:<br><br>`;
+            
+            // 各処理施設への確率を計算して表示（構造: probabilities[processorId][wasteType]）
+            let totalDistributed = 0;
+            
+            for (let processorId = 0; processorId < inputData.N; processorId++) {{
+                const prob = probabilities[processorId] && probabilities[processorId][wasteType] ? probabilities[processorId][wasteType] : 0;
+                totalDistributed += prob;
+                
+                // すべての処理施設を表示（0%も含む）
+                const isCorrect = processorId === correctProcessor;
+                let style = '';
+                if (isCorrect) {{
+                    style = 'color: green; font-weight: bold; background-color: #e8f5e8; padding: 2px 4px; border-radius: 3px;';
+                }} else if (prob === 0) {{
+                    style = 'color: #999; font-size: 0.9em;'; // 0%の場合はグレーアウト
+                }}
+                
+                distributionContent += `<div style="margin-bottom: 4px; ${{style}}">処理施設 ${{processorId}}: ${{(prob * 100).toFixed(2)}}%${{isCorrect ? ' ✓' : ''}}</div>`;
+            }}
+            
+            distributionContent += `<hr style="margin: 15px 0; border: none; border-top: 1px solid #ddd;">`;
+            distributionContent += `<div style="font-weight: bold; color: #2196F3;">正解処理施設への成功確率: ${{(successProb * 100).toFixed(1)}}%</div>`;
+            distributionContent += `<div style="font-size: 0.9em; color: #666; margin-top: 5px;">合計確率: ${{(totalDistributed * 100).toFixed(2)}}%</div>`;
+            
+            distributionPanel.innerHTML = distributionContent;
             
             console.log('Calling updateSVGColors with wasteType:', wasteType);
             // SVG要素を更新
@@ -369,11 +346,11 @@ fn main() {
                     let prob = 0;
                     
                     if (titleText.includes('inlet -')) {{
-                        // 搬入口からの線分
-                        prob = 1.0;
+                        // 搬入口からの線分 - 開始ノード（搬入口）の確率を使用
+                        prob = 1.0; // 搬入口からの線分は常に100%通過
                         console.log('Inlet case: prob = 1.0');
                     }} else {{
-                        // 分別器からの線分 - titleから詳細情報を抽出
+                        // 分別器からの線分 - 実際の線分通過確率を計算
                         const match = titleText.match(/edge: (\d+) - (\d+) \| sep_type: (\d+)/);
                         console.log(`Regex match result:`, match);
                         if (match) {{
@@ -415,7 +392,8 @@ fn main() {
             const processorGroups = document.querySelectorAll('g');
             processorGroups.forEach(group => {{
                 const title = group.querySelector('title');
-                if (title && title.textContent.includes(`vertex: ${{processorId}} (processor`)) {{
+                // 新しいタイトル形式に対応: "vertex: X (processes waste Y)" または "vertex: X (no waste assigned)"
+                if (title && title.textContent.includes(`vertex: ${{processorId}} (`)) {{
                     const circle = group.querySelector('.processor-node');
                     if (circle) {{
                         circle.classList.add('highlighted');
@@ -489,7 +467,7 @@ fn main() {
                     info += `<p><strong>ゴミ種類別の処理詳細:</strong></p>`;
                     let totalThroughput = 0;
                     for (let wasteType = 0; wasteType < N; wasteType++) {{
-                        const inputProb = probabilities[wasteType] && probabilities[wasteType][selectedNodeId] ? probabilities[wasteType][selectedNodeId] : 0;
+                        const inputProb = probabilities[selectedNodeId] && probabilities[selectedNodeId][wasteType] ? probabilities[selectedNodeId][wasteType] : 0;
                         const prob1 = inputData.ps[sortType][wasteType];
                         const prob2 = 1.0 - prob1;
                         
@@ -567,9 +545,7 @@ fn main() {
             console.log('outputData keys:', Object.keys(outputData));
             
             if (Object.keys(inputData).length > 0 && Object.keys(outputData).length > 0) {{
-                console.log('Starting probability calculation...');
-                probabilities = calculateProbabilities(inputData, outputData);
-                console.log('Probability calculation completed');
+                console.log('Using precomputed probabilities');
                 
                 const slider = document.getElementById('wasteTypeSlider');
                 slider.max = inputData.N - 1;
@@ -585,7 +561,7 @@ fn main() {
     </script>
 </body>
 </html>"#,
-        score, svg, input_json, output_json
+        score, svg, input_json, output_json, probabilities_json
     );
     std::fs::write("vis.html", &vis).unwrap();
 }
