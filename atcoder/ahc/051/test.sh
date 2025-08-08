@@ -2,13 +2,13 @@
 
 total_score=0
 count=0
-rustc src/bin/main.rs -o main
+cargo build --bin main
 for i in {0..49}; do
   padded_i=$(printf "%04d" $i)
   file="in/${padded_i}.txt"
   if [ -f "$file" ]; then
     echo "Processing $padded_i..."
-    ./main < "$file" > "out.txt" 2>&1
+    ./target/debug/main < "$file" > "out.txt" 2>&1
     
     if [ $? -eq 0 ]; then
       score=$(cargo run -r --bin vis "in/${padded_i}.txt" "out.txt" 2>/dev/null | grep -oE "Score = [0-9]+" | grep -oE "[0-9]+")

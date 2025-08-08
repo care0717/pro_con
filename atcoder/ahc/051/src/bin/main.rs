@@ -1,6 +1,6 @@
+use rand::seq::SliceRandom;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
-
 macro_rules! mat {
 	($($e:expr),*) => { Vec::from(vec![$($e),*]) };
 	($($e:expr,)*) => { Vec::from(vec![$($e),*]) };
@@ -266,7 +266,7 @@ fn solve(
         probabilities.clone(),
     ));
     // out1==out2の分配器の接続改善
-    graph = connect_graph(&graph);
+    // graph = connect_graph(&graph);
     // // 単一接続分別器の処理（追加）
     // graph = connect_single_separators(&graph);
     // 最終的な設定をwork_graph.edgesから生成
@@ -277,20 +277,14 @@ fn solve(
     (device_assignments, graph.start_node, configs, graph)
 }
 
-// キューベースのスコア計算関数
-fn calculate_score(
+fn build_processor_probabilities(
     n: usize,
     m: usize,
-    processor_positions: &Vec<Point>,
-    separator_positions: &Vec<Point>,
     probabilities: &Vec<Vec<f64>>,
     graph: &Graph,
     configs: &Vec<String>,
-) -> i64 {
+) -> Vec<Vec<f64>> {
     let mut probs = mat![0.0; n + m; n];
-
-    // デバイス割り当てをチェック（順番通り）
-    let device_assignments: Vec<usize> = (0..n).collect();
 
     // スタートノードをチェック
     let start_node = graph.start_node;
@@ -347,11 +341,20 @@ fn calculate_score(
         }
     }
 
+    probs
+}
+// キューベースのスコア計算関数
+fn calculate_score(
+    n: usize,
+    m: usize,
+    processor_probabilities: &Vec<Vec<f64>>,
+    device_assignments: &Vec<usize>,
+) -> i64 {
     // スコア計算
     let mut score = 0.0;
     for i in 0..n {
         let d = device_assignments[i];
-        let q = probs[i][d];
+        let q = processor_probabilities[i][d];
         score += 1.0 - q;
     }
     score /= n as f64;
@@ -961,37 +964,42 @@ fn main() {
         .map(|(x, y)| Point { x, y })
         .collect();
 
-    let time_limit = Duration::from_millis(50); // 2秒の時間制限
+    let time_limit = Duration::from_millis(1500); // 1.5秒の時間制限
 
-    let mut best_score = f64::MAX;
-    let mut best_solution = ((0..n).collect::<Vec<usize>>(), 0, vec!["-1".to_string(); m]);
+    // まず一度だけsolveを実行してグラフを構築
+    let (initial_device_assignments, start_node, separator_configs, graph) = solve(
+        n,
+        m,
+        &processor_positions,
+        &separator_positions,
+        &probabilities,
+    );
+
+    // 各処理装置への累積流入確率を事前計算
+    let processor_probabilities =
+        build_processor_probabilities(n, m, &probabilities, &graph, &separator_configs);
+
+    let mut best_score =
+        calculate_score(n, m, &processor_probabilities, &initial_device_assignments);
+    let mut best_device_assignments = initial_device_assignments.clone();
+
+    // 時間いっぱいまでdevice_assignmentsをシャッフルして最適化
+    let mut rng: rand::prelude::ThreadRng = rand::thread_rng();
+    let current_assignments = initial_device_assignments;
 
     while start_time.elapsed() < time_limit {
-        let (device_assignments, start_node, separator_configs, graph) = solve(
-            n,
-            m,
-            &processor_positions,
-            &separator_positions,
-            &probabilities,
-        );
+        let mut cloned_assignments = current_assignments.clone();
+        cloned_assignments.shuffle(&mut rng);
 
-        let score = calculate_score(
-            n,
-            m,
-            &processor_positions,
-            &separator_positions,
-            &probabilities,
-            &graph,
-            &separator_configs,
-        );
-
-        if score as f64 <= best_score {
-            best_score = score as f64;
-            best_solution = (device_assignments, start_node, separator_configs);
+        let score = calculate_score(n, m, &processor_probabilities, &cloned_assignments);
+        // eprint!("Current score: {} ", score);
+        if score < best_score {
+            best_score = score;
+            best_device_assignments = cloned_assignments.clone();
         }
     }
 
-    let (device_assignments, start_node, separator_configs) = best_solution;
+    let device_assignments = best_device_assignments;
     print!(
         "{}",
         device_assignments
