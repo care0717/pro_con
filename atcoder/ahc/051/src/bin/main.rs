@@ -1,5 +1,4 @@
-use std::collections::{HashMap, VecDeque};
-use std::ops::RangeBounds;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 macro_rules! mat {
@@ -85,10 +84,10 @@ struct Out {
     out2: NodeId,
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum OutType {
-    Out1,
-    Out2,
+    Out1 = 1,
+    Out2 = -1,
 }
 #[derive(PartialEq, Clone, Debug)]
 struct Source {
@@ -286,6 +285,7 @@ fn calculate_score(
     separator_positions: &Vec<Point>,
     probabilities: &Vec<Vec<f64>>,
     graph: &Graph,
+    configs: &Vec<String>,
 ) -> i64 {
     let mut probs = mat![0.0; n + m; n];
 
@@ -305,7 +305,6 @@ fn calculate_score(
     visited[start_node] = true;
 
     // 分別器の設定を取得
-    let configs = generate_configs_from_graph(graph);
 
     while let Some(current) = queue.pop_front() {
         if current >= n {
@@ -411,7 +410,7 @@ fn build_network_greedy(graph: Graph) -> Graph {
         for &(node_id, dist) in &graph.separator_distance_sorted[current_sep_idx] {
             if node_id < graph.n {
                 // 処理装置の場合：counter > 10の場合のみ追加
-                if counter > 10 {
+                if counter > 5 {
                     candidates.push((dist, node_id));
                 }
             } else {
@@ -529,9 +528,10 @@ fn connect_graph(graph: &Graph) -> Graph {
     let mut queue = std::collections::VecDeque::new();
     queue.push_back(work_graph.start_node);
     // 各処理装置への到達可能性を計算
-    let reachouts = get_reachout_edge(&work_graph);
+    let (reachouts, _) = get_reachout_edge(&work_graph);
 
     let mut visited = std::collections::HashSet::new();
+    let mut counter = 0;
     while let Some(current) = queue.pop_front() {
         if visited.contains(&current) {
             continue;
@@ -571,6 +571,10 @@ fn connect_graph(graph: &Graph) -> Graph {
 
                     // 候補ノードが到達できる処理装置を取得
                     let candidate_reachable = if node_id < graph.n {
+                        if counter < 5 {
+                            // 処理装置の場合はスキップ
+                            continue;
+                        }
                         // 処理装置の場合
                         let mut set = std::collections::HashSet::new();
                         set.insert(node_id);
@@ -621,6 +625,7 @@ fn connect_graph(graph: &Graph) -> Graph {
                         }
                     }
                 }
+                counter += 1;
             } else {
                 queue.push_back(out.out1);
                 queue.push_back(out.out2);
@@ -635,8 +640,8 @@ fn connect_graph(graph: &Graph) -> Graph {
 // graph.edgesからconfigsを生成 O(m * k * n)
 fn generate_configs_from_graph(graph: &Graph) -> Vec<String> {
     let mut configs = vec!["-1".to_string(); graph.m];
-    let edges = get_reachout_edge(graph);
-    // eprintln!("Edges: {:?}", edges);
+    let (edges, can_reach) = get_reachout_edge(graph);
+
     for sep_idx in 0..graph.m {
         let sep_node = graph.n + sep_idx;
 
@@ -787,7 +792,12 @@ fn remove_disconnected_separators(graph: &mut Graph) {
     }
 }
 
-fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<WeightedReachability>> {
+fn get_reachout_edge(
+    graph: &Graph,
+) -> (
+    HashMap<NodeId, Vec<WeightedReachability>>,
+    HashMap<NodeId, HashSet<NodeId>>,
+) {
     let reverse_graph = build_reverse_graph(graph);
 
     let mut queue = std::collections::VecDeque::new();
@@ -815,6 +825,7 @@ fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<WeightedReachability>
         let mut dist_map = std::collections::HashMap::new();
         dist_map.insert(i, 0.0); // 自分への距離は0
         distances.insert(i, dist_map);
+
         queue.push_back(i);
     }
 
@@ -854,25 +865,17 @@ fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<WeightedReachability>
                                 1.0
                             };
 
-                            if source.ty == OutType::Out1 {
-                                if current_processors[j].reachout != 0 {
-                                    processors[j].reachout += current_processors[j].reachout.abs();
-                                    processors[j].distance_weight += distance_weight;
-                                } else if current_can_reach.contains(&j) {
-                                    processors[j].reachout += 1;
-                                    processors[j].distance_weight += distance_weight;
-                                }
-                            } else {
-                                if current_processors[j].reachout != 0 {
-                                    processors[j].reachout -= current_processors[j].reachout.abs();
-                                    processors[j].distance_weight += distance_weight;
-                                } else if current_can_reach.contains(&j) {
-                                    processors[j].reachout -= 1;
-                                    processors[j].distance_weight += distance_weight;
-                                }
+                            if current_processors[j].reachout != 0 {
+                                processors[j].reachout +=
+                                    (source.ty as i32) * current_processors[j].reachout.abs();
+                            } else if current_can_reach.contains(&j) {
+                                processors[j].reachout += source.ty as i32;
                             }
+
+                            processors[j].distance_weight += distance_weight;
                         }
                     }
+                    queue.push_back(predecessor);
                 } else {
                     let mut processors = vec![
                         WeightedReachability {
@@ -894,25 +897,20 @@ fn get_reachout_edge(graph: &Graph) -> HashMap<NodeId, Vec<WeightedReachability>
                                 1.0
                             };
 
-                            if source.ty == OutType::Out1 {
-                                processors[j].reachout += current_processors[j].reachout.abs();
-                                processors[j].distance_weight = distance_weight;
-                            } else {
-                                processors[j].reachout -= current_processors[j].reachout.abs();
-                                processors[j].distance_weight = distance_weight;
-                            }
+                            processors[j].reachout +=
+                                (source.ty as i32) * current_processors[j].reachout.abs();
+                            processors[j].distance_weight = distance_weight;
                         }
                     }
                     visited.insert(predecessor, processors);
                     can_reach.insert(predecessor, current_can_reach.clone());
                     distances.insert(predecessor, new_distances);
-                    queue.push_back(predecessor);
                 }
             }
         }
     }
 
-    visited
+    (visited, can_reach)
 }
 
 // 最適な分別器タイプを選択 O(k * n)
@@ -963,7 +961,7 @@ fn main() {
         .map(|(x, y)| Point { x, y })
         .collect();
 
-    let time_limit = Duration::from_millis(1500); // 2秒の時間制限
+    let time_limit = Duration::from_millis(50); // 2秒の時間制限
 
     let mut best_score = f64::MAX;
     let mut best_solution = ((0..n).collect::<Vec<usize>>(), 0, vec!["-1".to_string(); m]);
@@ -976,7 +974,6 @@ fn main() {
             &separator_positions,
             &probabilities,
         );
-        let built_graph = build_network_greedy(graph);
 
         let score = calculate_score(
             n,
@@ -984,7 +981,8 @@ fn main() {
             &processor_positions,
             &separator_positions,
             &probabilities,
-            &built_graph,
+            &graph,
+            &separator_configs,
         );
 
         if score as f64 <= best_score {
@@ -1298,7 +1296,7 @@ mod tests {
         // 単純なネットワーク構築: 分別器0 -> 処理装置0,1
         add_edge(&mut graph, 3, 0, 1);
 
-        let reachout_edges = get_reachout_edge(&graph);
+        let (reachout_edges, _) = get_reachout_edge(&graph);
 
         // 分別器0から各処理装置への到達可能性をチェック
         assert!(reachout_edges.contains_key(&3));
@@ -1322,7 +1320,7 @@ mod tests {
         add_edge(&mut graph, 3, 4, 0); // 分別器0 -> 分別器1, 処理装置0
         add_edge(&mut graph, 4, 1, 2); // 分別器1 -> 処理装置1, 処理装置2
 
-        let reachout_edges = get_reachout_edge(&graph);
+        let (reachout_edges, _) = get_reachout_edge(&graph);
 
         // 分別器0からの到達可能性
         if let Some(reachouts_sep0) = reachout_edges.get(&3) {
@@ -1350,7 +1348,7 @@ mod tests {
         let graph = create_test_graph();
 
         // 辺がない場合のテスト
-        let reachout_edges = get_reachout_edge(&graph);
+        let (reachout_edges, _) = get_reachout_edge(&graph);
 
         // 処理装置のみが存在し、それぞれ自分自身に到達可能
         for i in 0..graph.n {
@@ -1407,7 +1405,7 @@ mod tests {
         add_edge(&mut graph, 8, 2, 3); // 分別器4 → 処理装置2, 処理装置3
         add_edge(&mut graph, 6, 1, 2); // 分別器2 → 処理装置1, 処理装置2
 
-        let reachout_edges = get_reachout_edge(&graph);
+        let (reachout_edges, _) = get_reachout_edge(&graph);
 
         // 分別器0からの到達可能性（複数経路で処理装置に到達）
         if let Some(reachouts_sep0) = reachout_edges.get(&4) {
@@ -1461,7 +1459,7 @@ mod tests {
         add_edge(&mut graph, 4, 1, 5); // 分別器1 → 処理装置1, 分別器2
         add_edge(&mut graph, 5, 0, 1); // 分別器2 → 処理装置0, 処理装置1
 
-        let reachout_edges = get_reachout_edge(&graph);
+        let (reachout_edges, _) = get_reachout_edge(&graph);
 
         // 分別器0からの到達可能性
         if let Some(reachouts_sep0) = reachout_edges.get(&3) {
@@ -1509,7 +1507,7 @@ mod tests {
         add_edge(&mut graph, 3, 5, 5); // 分別器1 → 分別器3, 分別器3
         add_edge(&mut graph, 5, 0, 1); // 分別器3 → 処理装置0, 処理装置1
 
-        let reachout_edges = get_reachout_edge(&graph);
+        let (reachout_edges, _) = get_reachout_edge(&graph);
 
         // 同じ分別器に両方の出力が向かう場合は有効な経路とならないため、
         // 分別器0からは直接的な到達不可能
@@ -1563,7 +1561,7 @@ mod tests {
         add_edge(&mut graph, 4, 0, 1); // 分別器1 → 処理装置0, 処理装置1
         add_edge(&mut graph, 5, 1, 2); // 分別器2 → 処理装置1, 処理装置2
 
-        let reachout_edges = get_reachout_edge(&graph);
+        let (reachout_edges, _) = get_reachout_edge(&graph);
 
         // 分別器0からの到達可能性
         if let Some(reachouts_sep0) = reachout_edges.get(&3) {

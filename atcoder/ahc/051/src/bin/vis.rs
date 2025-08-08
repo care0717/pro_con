@@ -81,7 +81,7 @@ fn main() {
     <title>Waste Processing Visualizer</title>
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
-        .container {{ max-width: 1200px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        .container {{ max-width: 1600px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
         .controls {{ margin-bottom: 20px; padding: 15px; background-color: #f9f9f9; border-radius: 8px; }}
         .control-group {{ margin-bottom: 15px; }}
         label {{ display: block; font-weight: bold; margin-bottom: 5px; color: #333; }}
@@ -93,7 +93,9 @@ fn main() {
         .info {{ background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196F3; }}
         .legend {{ display: flex; align-items: center; margin-bottom: 10px; gap: 10px; }}
         .color-box {{ width: 25px; height: 15px; border: 1px solid #333; border-radius: 3px; }}
-        .svg-container {{ border: 2px solid #ddd; border-radius: 8px; overflow: hidden; }}
+        .main-content {{ display: flex; gap: 20px; }}
+        .svg-container {{ border: 2px solid #ddd; border-radius: 8px; overflow: hidden; flex: 1; }}
+        .info-panel {{ width: 400px; background-color: #f8f9fa; border: 2px solid #dee2e6; border-radius: 8px; padding: 15px; max-height: 600px; overflow-y: auto; }}
         .highlighted {{ stroke-width: 4 !important; }}
     </style>
 </head>
@@ -126,11 +128,16 @@ fn main() {
             </div>
             <div id="scoreInfo">スコア: {}</div>
             <div id="probInfo"></div>
-            <div id="nodeInfo"></div>
         </div>
         
-        <div class="svg-container" id="svgContainer">
-            {}
+        <div class="main-content">
+            <div class="svg-container" id="svgContainer">
+                {}
+            </div>
+            <div class="info-panel">
+                <h3>ノード詳細情報</h3>
+                <div id="nodeInfo">ノードを選択してください</div>
+            </div>
         </div>
     </div>
     
@@ -307,6 +314,7 @@ fn main() {
             // 対応する処理装置を取得
             const correctProcessor = outputData.ds[wasteType];
             const successProb = probabilities[wasteType] && probabilities[wasteType][correctProcessor] ? probabilities[wasteType][correctProcessor] : 0;
+            
             probInfo.innerHTML = `<strong>ゴミ種類 ${{wasteType}}</strong> → 処理装置 ${{correctProcessor}} (成功確率: ${{(successProb * 100).toFixed(1)}}%)`;
             
             console.log('Calling updateSVGColors with wasteType:', wasteType);
@@ -477,13 +485,30 @@ fn main() {
                     info += `<p><strong>出力1:</strong> ノード${{v1}} ${{v1 < N ? '(処理装置)' : '(分別器)'}}</p>`;
                     info += `<p><strong>出力2:</strong> ノード${{v2}} ${{v2 < N ? '(処理装置)' : '(分別器)'}}</p>`;
                     
-                    // 分別確率を表示
-                    info += `<p><strong>分別確率 (ゴミ種類別):</strong></p>`;
+                    // 分別確率と実際の処理量を統合表示
+                    info += `<p><strong>ゴミ種類別の処理詳細:</strong></p>`;
+                    let totalThroughput = 0;
                     for (let wasteType = 0; wasteType < N; wasteType++) {{
+                        const inputProb = probabilities[wasteType] && probabilities[wasteType][selectedNodeId] ? probabilities[wasteType][selectedNodeId] : 0;
                         const prob1 = inputData.ps[sortType][wasteType];
                         const prob2 = 1.0 - prob1;
-                        info += `<p style="margin-left: 20px;">ゴミ${{wasteType}}: 出力1へ ${{(prob1*100).toFixed(1)}}%, 出力2へ ${{(prob2*100).toFixed(1)}}%</p>`;
+                        
+                        info += `<div style="margin-left: 20px; margin-bottom: 10px; padding: 8px; background-color: #f9f9f9; border-left: 3px solid #4CAF50;">`;
+                        info += `<strong>ゴミ${{wasteType}}:</strong><br>`;
+                        info += `設計分別確率: 出力1へ ${{(prob1*100).toFixed(1)}}%, 出力2へ ${{(prob2*100).toFixed(1)}}%<br>`;
+                        
+                        if (inputProb > 0.001) {{ // 0.1%以上の場合のみ実際の処理量を表示
+                            const out1Amount = inputProb * prob1;
+                            const out2Amount = inputProb * prob2;
+                            info += `実際の搬入量: ${{(inputProb*100).toFixed(2)}}%<br>`;
+                            info += `→ 出力1: ${{(out1Amount*100).toFixed(2)}}%, 出力2: ${{(out2Amount*100).toFixed(2)}}%`;
+                        }} else {{
+                            info += `実際の搬入量: なし (0.1%未満)`;
+                        }}
+                        info += `</div>`;
+                        totalThroughput += inputProb;
                     }}
+                    info += `<p style="font-weight: bold; font-size: 16px; color: #2196F3;">合計処理量: ${{(totalThroughput*100).toFixed(2)}}%</p>`;
                 }}
                 
                 // この分別器への入力辺を探す
