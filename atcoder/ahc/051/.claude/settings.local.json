@@ -3,7 +3,15 @@
     "allow": [
       "Bash(cargo check:*)",
       "Bash(rustc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "mcp__serena__list_dir",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__search_for_pattern",
+      "mcp__serena__write_memory",
+      "mcp__serena__find_symbol",
+      "Bash(cargo build:*)",
+      "Bash(cargo test)",
+      "mcp__serena__think_about_whether_you_are_done"
     ],
     "deny": []
   }
