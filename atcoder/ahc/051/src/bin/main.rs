@@ -356,10 +356,6 @@ fn build_network_greedy(graph: Graph) -> Graph {
     let mut used_separators = vec![false; graph.m];
     let mut queue = VecDeque::new();
 
-    if graph.separator_positions.is_empty() {
-        return graph.clone();
-    }
-
     let start_pos = Point { x: 0, y: 5000 };
     const ENTRANCE_NODE: NodeId = usize::MAX;
 
@@ -386,6 +382,7 @@ fn build_network_greedy(graph: Graph) -> Graph {
     );
     queue.push_back(best_sep);
     used_separators[best_sep] = true;
+
     let mut counter = 0;
 
     // Process separators with improved candidate selection
@@ -964,11 +961,18 @@ fn solve(
     let mut best_processor_probs =
         build_processor_probabilities(n, m, &probabilities, &graph, &best_configs, &topo_order);
 
+    // Get reachability information
+    let (_, can_reach) = get_reachout_edge(&graph);
+
     // Find modifiable separators
     let modifiable_separators: Vec<usize> = graph
         .edges
         .iter()
-        .filter(|(&node_id, &ref out)| out.out1 != out.out2 && node_id >= n)
+        .filter(|(&node_id, &ref out)| {
+            out.out1 != out.out2
+                && node_id >= n
+                && can_reach.get(&node_id).map_or(0, |set| set.len()) >= 2
+        })
         .map(|(node_id, _)| node_id - n)
         .collect();
 
@@ -990,9 +994,9 @@ fn solve(
 
         // Select separator(s) to modify
         let batch_size = if iterations < 500 {
-            1 // Start with single changes for precision
+            3 // Start with single changes for precision
         } else {
-            std::cmp::min(3, modifiable_separators.len()) // Small batches later
+            1
         };
 
         let mut selected_separators = Vec::new();
@@ -1043,7 +1047,7 @@ fn solve(
             } else {
                 // More exploration later
                 let mut new_type = rng.gen_range(0..probabilities.len());
-                while new_type == current_type && probabilities.len() > 1 {
+                while new_type == current_type {
                     new_type = rng.gen_range(0..probabilities.len());
                 }
                 new_type
@@ -1065,40 +1069,7 @@ fn solve(
             best_processor_probs = new_probs;
             improvements += 1;
         }
-
-        // Occasional restart for diversity
-        if iterations % 200 == 0 && improvements < iterations / 20 {
-            let restart_count = std::cmp::min(5, modifiable_separators.len());
-            let mut restart_configs = best_configs.clone();
-
-            for _ in 0..restart_count {
-                let sep_idx = modifiable_separators[rng.gen_range(0..modifiable_separators.len())];
-                let new_type = rng.gen_range(0..probabilities.len());
-                if let Some(out) = graph.edges.get(&(n + sep_idx)) {
-                    restart_configs[sep_idx] = format!("{} {} {}", new_type, out.out1, out.out2);
-                }
-            }
-
-            let restart_probs = build_processor_probabilities(
-                n,
-                m,
-                &probabilities,
-                &graph,
-                &restart_configs,
-                &topo_order,
-            );
-            let restart_assignments = simple_device_assignment(n, &restart_probs);
-            let restart_score = calculate_score(n, m, &restart_probs, &restart_assignments);
-
-            if restart_score < best_score {
-                best_score = restart_score;
-                best_configs = restart_configs;
-                best_processor_probs = restart_probs;
-                improvements += 1;
-            }
-        }
     }
-
     (graph, best_configs, best_processor_probs)
 }
 
