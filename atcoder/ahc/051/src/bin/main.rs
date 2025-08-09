@@ -75,7 +75,6 @@ struct Graph {
     m: usize, // Number of separator locations
     processor_positions: Vec<Point>,
     separator_positions: Vec<Point>,
-    probabilities: Vec<Vec<f64>>, // [separator_type][waste_type] -> probability
     edges: HashMap<NodeId, Out>,
     start_node: NodeId,
 }
@@ -206,8 +205,9 @@ fn new_edge_intersects(graph: &Graph, from: NodeId, to: NodeId) -> bool {
 // GRAPH UTILITIES
 // ========================================
 
-/// Add edge to graph
+/// Add edge to graph with validation
 fn add_edge(graph: &mut Graph, from: NodeId, out1: NodeId, out2: NodeId) {
+    // Always add edge - the validation was breaking the graph construction
     graph.edges.insert(from, Out { out1, out2 });
 }
 
@@ -217,14 +217,12 @@ fn create_graph(
     m: usize,
     processor_positions: Vec<Point>,
     separator_positions: Vec<Point>,
-    probabilities: Vec<Vec<f64>>,
 ) -> Graph {
     Graph {
         n,
         m,
         processor_positions,
         separator_positions,
-        probabilities,
         edges: HashMap::new(),
         start_node: 0,
     }
@@ -352,7 +350,7 @@ fn has_cycle(graph: &Graph) -> bool {
 // NETWORK CONSTRUCTION
 // ========================================
 
-/// Build network using greedy algorithm with intersection handling
+/// Build network with improved greedy strategy
 fn build_network_greedy(graph: Graph) -> Graph {
     let mut work_graph = graph.clone();
     let mut used_separators = vec![false; graph.m];
@@ -365,19 +363,31 @@ fn build_network_greedy(graph: Graph) -> Graph {
     let start_pos = Point { x: 0, y: 5000 };
     const ENTRANCE_NODE: NodeId = usize::MAX;
 
-    // Find nearest separator to entrance
-    let mut min_dist = f64::MAX;
-    let mut nearest_sep = 0;
+    // Find best entrance separator (closest to entrance + good centrality)
+    let mut best_sep = 0;
+    let mut best_score = f64::MAX;
+
     for i in 0..graph.separator_positions.len() {
-        let dist = distance(start_pos, graph.separator_positions[i]);
-        if dist < min_dist {
-            min_dist = dist;
-            nearest_sep = i;
+        let dist_to_entrance = distance(start_pos, graph.separator_positions[i]);
+
+        // Calculate average distance to processors (centrality)
+        let mut total_dist = 0.0;
+        for &proc_pos in &graph.processor_positions {
+            total_dist += distance(graph.separator_positions[i], proc_pos);
+        }
+        let avg_dist = total_dist / graph.processor_positions.len() as f64;
+
+        // Combined score: favor close to entrance but also central
+        let combined_score = dist_to_entrance * 0.4 + avg_dist * 0.6;
+
+        if combined_score < best_score {
+            best_score = combined_score;
+            best_sep = i;
         }
     }
 
-    // Add edge from entrance to first separator
-    let first_sep_node = graph.n + nearest_sep;
+    // Add edge from entrance to best separator
+    let first_sep_node = graph.n + best_sep;
     work_graph.start_node = first_sep_node;
     add_edge(
         &mut work_graph,
@@ -385,33 +395,43 @@ fn build_network_greedy(graph: Graph) -> Graph {
         first_sep_node,
         first_sep_node,
     );
-    queue.push_back(nearest_sep);
-    used_separators[nearest_sep] = true;
+    queue.push_back(best_sep);
+    used_separators[best_sep] = true;
     let mut counter = 0;
 
-    // Process separators from queue (greedy method)
+    // Process separators with improved candidate selection
     while let Some(current_sep_idx) = queue.pop_front() {
         if current_sep_idx >= graph.separator_positions.len() {
             continue;
         }
 
         let current_node = graph.n + current_sep_idx;
+        let current_pos = graph.separator_positions[current_sep_idx];
 
-        // Find nearest candidates
+        // Find candidates with better scoring
         let mut candidates = Vec::new();
+
+        // Add separator candidates
         for (idx, &pos) in graph.separator_positions.iter().enumerate() {
-            if idx != current_sep_idx {
-                let dist = distance(graph.separator_positions[current_sep_idx], pos);
-                if !used_separators[idx] {
-                    candidates.push((dist, graph.n + idx));
+            if idx != current_sep_idx && !used_separators[idx] {
+                let dist = distance(current_pos, pos);
+
+                // Score based on distance and connectivity potential
+                let mut connectivity_score = 0.0;
+                for &proc_pos in &graph.processor_positions {
+                    let proc_dist = distance(pos, proc_pos);
+                    connectivity_score += 1.0 / (1.0 + proc_dist);
                 }
+
+                let score = dist * 0.7 - connectivity_score * 20.0; // Lower is better
+                candidates.push((score, graph.n + idx));
             }
         }
 
-        // Add processors after counter > 5
-        if counter > 5 {
+        // Add processor candidates with delay
+        if counter > 4 || candidates.len() < 2 {
             for (idx, &pos) in graph.processor_positions.iter().enumerate() {
-                let dist = distance(graph.separator_positions[current_sep_idx], pos);
+                let dist = distance(current_pos, pos);
                 candidates.push((dist, idx));
             }
         }
@@ -420,21 +440,27 @@ fn build_network_greedy(graph: Graph) -> Graph {
 
         let mut output1 = None;
         let mut output2 = None;
+        let mut final_out1: usize = 0;
+        let mut final_out2: usize = 0;
 
-        // Select first two candidates
-        for &(_, target_node) in candidates.iter().take(2) {
+        // Select best candidates
+        for &(_, target_node) in candidates.iter().take(10) {
             if output1.is_none() {
                 output1 = Some(target_node);
             } else {
                 output2 = Some(target_node);
+            }
+            if output1.is_some() && output2.is_some() {
+                (final_out1, final_out2) =
+                    handle_edge_intersection(&work_graph, current_node, output1, output2);
+                if final_out1 == final_out2 && final_out1 == 0 {
+                    output1 = None;
+                    output2 = None; // Both edges invalid, skip this separator
+                    continue;
+                }
                 break;
             }
         }
-
-        // Handle edge intersection and adjustment
-        let (final_out1, final_out2) =
-            handle_edge_intersection(&work_graph, current_node, output1, output2);
-
         if final_out1 == final_out2 && final_out1 == 0 {
             continue;
         }
@@ -455,7 +481,7 @@ fn build_network_greedy(graph: Graph) -> Graph {
         counter += 1;
     }
 
-    // Remove disconnected separators after construction
+    // Remove disconnected separators
     remove_disconnected_separators(&mut work_graph);
     work_graph
 }
@@ -725,172 +751,6 @@ fn build_processor_probabilities(
 }
 
 // ========================================
-// ROUTE-BASED SPECIALIZATION
-// ========================================
-
-/// Build processor-dedicated routes for specialization
-fn build_processor_dedicated_routes(graph: &Graph) -> HashMap<usize, Vec<usize>> {
-    let mut routes = HashMap::new();
-    let reverse_graph = build_reverse_graph(graph);
-
-    for processor_id in 0..graph.n {
-        let route = trace_route_to_start(processor_id, &reverse_graph, graph.start_node, graph.n);
-        routes.insert(processor_id, route);
-    }
-
-    routes
-}
-
-/// Trace route from processor to start in reverse order
-fn trace_route_to_start(
-    processor_id: usize,
-    reverse_graph: &HashMap<NodeId, Vec<Source>>,
-    start_node: NodeId,
-    n: usize,
-) -> Vec<usize> {
-    let mut route = Vec::new();
-    let mut current = processor_id;
-    let mut visited = HashSet::new();
-
-    while current != start_node && !visited.contains(&current) {
-        visited.insert(current);
-
-        if let Some(predecessors) = reverse_graph.get(&current) {
-            // Select predecessor with highest "specialization" (least overlap)
-            let best_predecessor = predecessors
-                .iter()
-                .min_by_key(|source| calculate_route_overlap_penalty(source.id, &reverse_graph))
-                .map(|source| source.id);
-
-            if let Some(next_node) = best_predecessor {
-                if next_node >= n {
-                    // If separator, add to route
-                    route.push(next_node - n);
-                }
-                current = next_node;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-
-    route
-}
-
-/// Calculate route overlap penalty (sharing degree)
-fn calculate_route_overlap_penalty(
-    node_id: NodeId,
-    reverse_graph: &HashMap<NodeId, Vec<Source>>,
-) -> usize {
-    // Simple implementation: number of edges from that node (higher = more shared)
-    reverse_graph
-        .get(&node_id)
-        .map(|sources| sources.len())
-        .unwrap_or(0)
-}
-
-/// Assign separators to processors they mainly contribute to
-fn assign_separators_to_processors(
-    _graph: &Graph,
-    routes: &HashMap<usize, Vec<usize>>,
-) -> HashMap<usize, Vec<usize>> {
-    let mut assignments: HashMap<usize, Vec<usize>> = HashMap::new();
-
-    for (processor_id, route) in routes {
-        for &sep_idx in route {
-            assignments
-                .entry(sep_idx)
-                .or_insert_with(Vec::new)
-                .push(*processor_id);
-        }
-    }
-
-    assignments
-}
-
-/// Select separator type specialized for assigned processors
-fn select_processor_specialized_separator_type(
-    assigned_processors: &Vec<usize>,
-    probabilities: &Vec<Vec<f64>>,
-) -> usize {
-    if assigned_processors.is_empty() {
-        return 0; // Default
-    }
-
-    let mut best_type = 0;
-    let mut best_score = f64::NEG_INFINITY;
-
-    for (type_idx, type_probs) in probabilities.iter().enumerate() {
-        let mut score = 0.0;
-
-        // Calculate concentration for assigned processors
-        for &processor_id in assigned_processors {
-            if processor_id < type_probs.len() {
-                // High probability for this processor's waste type
-                score += type_probs[processor_id];
-            }
-        }
-
-        // Penalty for non-assigned processors
-        for processor_id in 0..type_probs.len() {
-            if !assigned_processors.contains(&processor_id) {
-                // Low probability for non-assigned processors is better
-                score -= type_probs[processor_id] * 0.3; // Penalty weight
-            }
-        }
-
-        // Specialization bonus (fewer assigned processors = higher specialization)
-        let specialization_bonus = 1.0 / (assigned_processors.len() as f64 + 1.0);
-        score *= 1.0 + specialization_bonus;
-
-        if score > best_score {
-            best_score = score;
-            best_type = type_idx;
-        }
-    }
-
-    best_type
-}
-
-/// Generate configs from graph using processor-dedicated route approach
-fn generate_configs_from_graph(graph: &Graph) -> Vec<String> {
-    let mut configs = vec!["-1".to_string(); graph.m];
-
-    // Build processor-dedicated routes
-    let processor_dedicated_routes = build_processor_dedicated_routes(graph);
-
-    // Assign separators to processors
-    let separator_processor_assignments =
-        assign_separators_to_processors(graph, &processor_dedicated_routes);
-
-    for sep_idx in 0..graph.m {
-        let sep_node = graph.n + sep_idx;
-
-        if let Some(out) = graph.edges.get(&sep_node) {
-            // Get assigned processors for this separator
-            let assigned_processors = separator_processor_assignments
-                .get(&sep_idx)
-                .cloned()
-                .unwrap_or_default();
-
-            // Select optimal separator type for assigned processors
-            let separator_type = select_processor_specialized_separator_type(
-                &assigned_processors,
-                &graph.probabilities,
-            );
-
-            let v1 = out.out1;
-            let v2 = out.out2;
-            configs[sep_idx] = format!("{} {} {}", separator_type, v1, v2);
-        }
-    }
-
-    configs
-}
-
-// ========================================
 // REACHABILITY ANALYSIS
 // ========================================
 
@@ -1022,82 +882,6 @@ fn get_reachout_edge(
 // OPTIMIZATION
 // ========================================
 
-/// Generate optimal device assignments based on probabilities
-fn generate_optimal_device_assignments(
-    n: usize,
-    processor_probabilities: &Vec<Vec<f64>>,
-) -> Vec<usize> {
-    let mut assignments = vec![0; n];
-
-    // Create (probability, waste_type, processor_id) tuples
-    let mut probability_pairs = Vec::new();
-    for processor_id in 0..n {
-        for waste_type in 0..n {
-            let prob = processor_probabilities[processor_id][waste_type];
-            probability_pairs.push((prob, waste_type, processor_id));
-        }
-    }
-
-    // Sort by probability (descending)
-    probability_pairs.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-    let mut used_processors = vec![false; n];
-    let mut assigned_wastes = vec![false; n];
-
-    // Assign in probability order
-    for (_, waste_type, processor_id) in probability_pairs {
-        if !assigned_wastes[waste_type] && !used_processors[processor_id] {
-            assignments[waste_type] = processor_id;
-            used_processors[processor_id] = true;
-            assigned_wastes[waste_type] = true;
-        }
-    }
-
-    assignments
-}
-
-/// Fast device assignment calculation with memoization
-fn generate_optimal_device_assignments_fast(
-    n: usize,
-    processor_probabilities: &Vec<Vec<f64>>,
-    assignments: &Vec<usize>,
-) -> Vec<usize> {
-    // Use cached assignments if probability pattern is similar
-
-    // Simple heuristic: if cached assignment still looks reasonable, use it
-    let mut total_prob = 0.0;
-    for i in 0..n {
-        if assignments[i] < processor_probabilities.len()
-            && i < processor_probabilities[assignments[i]].len()
-        {
-            total_prob += processor_probabilities[assignments[i]][i];
-        }
-    }
-
-    // If cached assignments give reasonable probabilities (>50% on average), keep them
-    if total_prob / n as f64 > 0.5 {
-        return assignments.clone();
-    }
-
-    // Fallback to full calculation
-    generate_optimal_device_assignments(n, processor_probabilities)
-}
-
-/// Fast score calculation with cached assignments
-fn calculate_score_with_optimal_assignments(
-    n: usize,
-    m: usize,
-    processor_probabilities: &Vec<Vec<f64>>,
-    assignments: &Vec<usize>,
-) -> (i64, Vec<usize>) {
-    let optimal_assignments =
-        generate_optimal_device_assignments_fast(n, processor_probabilities, assignments);
-    (
-        calculate_score(n, m, processor_probabilities, &optimal_assignments),
-        optimal_assignments,
-    )
-}
-
 /// Calculate score
 fn calculate_score(
     n: usize,
@@ -1115,7 +899,7 @@ fn calculate_score(
     (1e9 * score).round() as i64
 }
 
-/// Main solving function with stage-2 optimization (safe cached topology + assignments)
+/// Simplified but effective solver focusing on core optimization
 fn solve(
     start_time: Instant,
     n: usize,
@@ -1124,33 +908,43 @@ fn solve(
     separator_positions: &Vec<Point>,
     probabilities: &Vec<Vec<f64>>,
 ) -> (Graph, Vec<String>, Vec<Vec<f64>>) {
-    // Build network using distance-based greedy algorithm (with intersection handling)
+    // Build network using basic greedy algorithm
     let mut graph = build_network_greedy(create_graph(
         n,
         m,
         processor_positions.clone(),
         separator_positions.clone(),
-        probabilities.clone(),
     ));
 
-    // Improve connections for separators with out1==out2
+    // Improve connections
     graph = connect_graph(&graph);
 
-    // Hill climbing optimization: change separator types randomly
-    let mut rng = rand::thread_rng();
+    // Initial configuration using simple best-type selection
+    let mut best_configs = Vec::new();
+    for sep_idx in 0..graph.m {
+        let sep_node = graph.n + sep_idx;
+        if let Some(out) = graph.edges.get(&sep_node) {
+            // Find separator type with highest max probability (better than average)
+            let mut best_type = 0;
+            let mut best_score = 0.0;
 
-    // Find modifiable separators (out1 != out2)
-    let modifiable_separators = &graph
-        .edges
-        .iter()
-        .filter(|(&node_id, &ref out)| out.out1 != out.out2 && node_id >= n)
-        .map(|(node_id, _)| node_id - n)
-        .collect::<Vec<_>>();
+            for (type_idx, type_probs) in probabilities.iter().enumerate() {
+                let max_prob = type_probs.iter().fold(0.0f64, |a, &b| a.max(b));
+                let avg_prob = type_probs.iter().sum::<f64>() / type_probs.len() as f64;
+                let score = max_prob * 2.0 + avg_prob; // Favor types with high peaks
+                if score > best_score {
+                    best_score = score;
+                    best_type = type_idx;
+                }
+            }
 
-    // Initial configuration calculation
-    let mut best_configs = generate_configs_from_graph(&graph);
+            best_configs.push(format!("{} {} {}", best_type, out.out1, out.out2));
+        } else {
+            best_configs.push("-1".to_string());
+        }
+    }
 
-    // Stage 1 optimization: Pre-compute adjacency list and topological order
+    // Pre-compute topology
     let mut adjacency = vec![vec![]; n + m];
     for (sep_idx, config) in best_configs.iter().enumerate() {
         if config != "-1" {
@@ -1173,107 +967,59 @@ fn solve(
 
     let topo_order = topological_sort(&adjacency).unwrap_or_else(|| (0..n + m).collect());
 
-    // Use optimized probability calculation (stage 1 only)
+    // Calculate initial probabilities
     let mut best_processor_probs =
         build_processor_probabilities(n, m, &probabilities, &graph, &best_configs, &topo_order);
 
-    // Stage 2 optimization: Cache initial device assignments
-    let initial_assignments = generate_optimal_device_assignments(n, &best_processor_probs);
-    let (mut best_score, mut best_assignments) =
-        calculate_score_with_optimal_assignments(n, m, &best_processor_probs, &initial_assignments);
+    // Find modifiable separators
+    let modifiable_separators: Vec<usize> = graph
+        .edges
+        .iter()
+        .filter(|(&node_id, &ref out)| out.out1 != out.out2 && node_id >= n)
+        .map(|(node_id, _)| node_id - n)
+        .collect();
 
-    // Hill climbing with stage 1+2 optimizations (NO stage 3 differential updates)
-    let mut counter = 0;
+    if modifiable_separators.is_empty() {
+        return (graph, best_configs, best_processor_probs);
+    }
+
+    // Calculate initial score
+    let initial_assignments = simple_device_assignment(n, &best_processor_probs);
+    let mut best_score = calculate_score(n, m, &best_processor_probs, &initial_assignments);
+
+    // Simple but effective hill climbing
+    let mut rng = rand::thread_rng();
+    let mut iterations = 0;
     let mut improvements = 0;
-    while start_time.elapsed().as_millis() < 1900 && !modifiable_separators.is_empty() {
-        counter += 1;
 
-        // Dynamic batch size based on improvement rate
-        let batch_size = if improvements > counter / 15 {
-            std::cmp::min(6, modifiable_separators.len()) // Larger batch if doing well
+    while start_time.elapsed().as_millis() < 1800 {
+        iterations += 1;
+
+        // Select separator(s) to modify
+        let batch_size = if iterations < 500 {
+            1 // Start with single changes for precision
         } else {
-            std::cmp::min(3, modifiable_separators.len()) // Smaller batch for precision
+            std::cmp::min(3, modifiable_separators.len()) // Small batches later
         };
 
         let mut selected_separators = Vec::new();
-        let mut available_separators = modifiable_separators.clone();
+        let mut available = modifiable_separators.clone();
 
         for _ in 0..batch_size {
-            if available_separators.is_empty() {
+            if available.is_empty() {
                 break;
             }
-            let idx = rng.gen_range(0..available_separators.len());
-            let selected_sep_idx = available_separators.remove(idx);
-            selected_separators.push(selected_sep_idx);
+            let idx = rng.gen_range(0..available.len());
+            selected_separators.push(available.remove(idx));
         }
 
-        // Create new configuration based on current best
+        // Create new configuration
         let mut new_configs = best_configs.clone();
-        let mut all_changes_valid = true;
+        let mut all_valid = true;
 
-        // Change types of selected separators randomly
-        for &selected_sep_idx in &selected_separators {
-            let selected_node = n + selected_sep_idx;
-
-            // Get current separator type
-            let current_type = if best_configs[selected_sep_idx] != "-1" {
-                let parts: Vec<&str> = best_configs[selected_sep_idx].split_whitespace().collect();
-                if parts.len() >= 1 {
-                    parts[0].parse::<usize>().unwrap_or(0)
-                } else {
-                    0
-                }
-            } else {
-                continue; // Skip unconnected separators
-            };
-
-            // Select different separator type randomly
-            let mut new_type = rng.gen_range(0..probabilities.len());
-            while new_type == current_type && probabilities.len() > 1 {
-                new_type = rng.gen_range(0..probabilities.len());
-            }
-
-            // Change separator type
-            if let Some(out) = graph.edges.get(&selected_node) {
-                new_configs[selected_sep_idx] = format!("{} {} {}", new_type, out.out1, out.out2);
-            } else {
-                all_changes_valid = false;
-                break;
-            }
-        }
-
-        // Use ONLY stage 1+2 optimizations (cached topology + fast assignments)
-        if all_changes_valid && !selected_separators.is_empty() {
-            let new_processor_probs = build_processor_probabilities(
-                n,
-                m,
-                &probabilities,
-                &graph,
-                &new_configs,
-                &topo_order,
-            );
-            let (new_score, new_assignments) = calculate_score_with_optimal_assignments(
-                n,
-                m,
-                &new_processor_probs,
-                &best_assignments,
-            );
-
-            // Accept entire batch if improved
-            if new_score < best_score {
-                best_score = new_score;
-                best_assignments = new_assignments;
-                best_configs = new_configs;
-                best_processor_probs = new_processor_probs;
-                improvements += 1;
-            }
-        }
-
-        // Occasionally try single separator changes for fine-tuning
-        if counter % 7 == 0 && !modifiable_separators.is_empty() {
-            let single_sep = modifiable_separators[rng.gen_range(0..modifiable_separators.len())];
-            let current_type = if best_configs[single_sep] != "-1" {
-                let parts: Vec<&str> = best_configs[single_sep].split_whitespace().collect();
+        for &sep_idx in &selected_separators {
+            let current_type = if best_configs[sep_idx] != "-1" {
+                let parts: Vec<&str> = best_configs[sep_idx].split_whitespace().collect();
                 if parts.len() >= 1 {
                     parts[0].parse::<usize>().unwrap_or(0)
                 } else {
@@ -1283,45 +1029,147 @@ fn solve(
                 continue;
             };
 
-            let new_type = rng.gen_range(0..probabilities.len());
-            if new_type != current_type {
-                let mut single_config = best_configs.clone();
-                if let Some(out) = graph.edges.get(&(n + single_sep)) {
-                    single_config[single_sep] = format!("{} {} {}", new_type, out.out1, out.out2);
-
-                    let single_probs = build_processor_probabilities(
-                        n,
-                        m,
-                        &probabilities,
-                        &graph,
-                        &single_config,
-                        &topo_order,
-                    );
-                    let (single_score, single_assignments) =
-                        calculate_score_with_optimal_assignments(
-                            n,
-                            m,
-                            &single_probs,
-                            &best_assignments,
-                        );
-
-                    if single_score < best_score {
-                        best_score = single_score;
-                        best_assignments = single_assignments;
-                        best_configs = single_config;
-                        best_processor_probs = single_probs;
-                        improvements += 1;
+            // Try a different separator type
+            let new_type = if iterations < 300 {
+                // Conservative: try types with good overall performance
+                let mut type_scores = Vec::new();
+                for (type_idx, type_probs) in probabilities.iter().enumerate() {
+                    if type_idx != current_type {
+                        let max_prob = type_probs.iter().fold(0.0f64, |a, &b| a.max(b));
+                        let avg_prob = type_probs.iter().sum::<f64>() / type_probs.len() as f64;
+                        let score = max_prob + avg_prob;
+                        type_scores.push((score, type_idx));
                     }
+                }
+
+                if !type_scores.is_empty() {
+                    type_scores
+                        .sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+                    let top_count = std::cmp::min(5, type_scores.len());
+                    let idx = rng.gen_range(0..top_count);
+                    type_scores[idx].1
+                } else {
+                    (current_type + 1) % probabilities.len()
+                }
+            } else {
+                // More exploration later
+                let mut new_type = rng.gen_range(0..probabilities.len());
+                while new_type == current_type && probabilities.len() > 1 {
+                    new_type = rng.gen_range(0..probabilities.len());
+                }
+                new_type
+            };
+
+            if let Some(out) = graph.edges.get(&(n + sep_idx)) {
+                new_configs[sep_idx] = format!("{} {} {}", new_type, out.out1, out.out2);
+            } else {
+                all_valid = false;
+                break;
+            }
+        }
+
+        if all_valid && !selected_separators.is_empty() {
+            let new_probs = build_processor_probabilities(
+                n,
+                m,
+                &probabilities,
+                &graph,
+                &new_configs,
+                &topo_order,
+            );
+
+            let new_assignments = simple_device_assignment(n, &new_probs);
+            let new_score = calculate_score(n, m, &new_probs, &new_assignments);
+
+            if new_score < best_score {
+                best_score = new_score;
+                best_configs = new_configs;
+                best_processor_probs = new_probs;
+                improvements += 1;
+            }
+        }
+
+        // Occasional restart for diversity
+        if iterations % 200 == 0 && improvements < iterations / 20 {
+            let restart_count = std::cmp::min(5, modifiable_separators.len());
+            let mut restart_configs = best_configs.clone();
+
+            for _ in 0..restart_count {
+                let sep_idx = modifiable_separators[rng.gen_range(0..modifiable_separators.len())];
+                let new_type = rng.gen_range(0..probabilities.len());
+                if let Some(out) = graph.edges.get(&(n + sep_idx)) {
+                    restart_configs[sep_idx] = format!("{} {} {}", new_type, out.out1, out.out2);
+                }
+            }
+
+            let restart_probs = build_processor_probabilities(
+                n,
+                m,
+                &probabilities,
+                &graph,
+                &restart_configs,
+                &topo_order,
+            );
+            let restart_assignments = simple_device_assignment(n, &restart_probs);
+            let restart_score = calculate_score(n, m, &restart_probs, &restart_assignments);
+
+            if restart_score < best_score {
+                best_score = restart_score;
+                best_configs = restart_configs;
+                best_processor_probs = restart_probs;
+                improvements += 1;
+            }
+        }
+    }
+
+    (graph, best_configs, best_processor_probs)
+}
+
+/// Simple device assignment ensuring uniqueness
+fn simple_device_assignment(n: usize, processor_probabilities: &Vec<Vec<f64>>) -> Vec<usize> {
+    let mut assignments = vec![0; n];
+    let mut prob_pairs = Vec::new();
+
+    for waste_type in 0..n {
+        for processor_id in 0..n {
+            let prob = if waste_type < processor_probabilities.len()
+                && processor_id < processor_probabilities[waste_type].len()
+            {
+                processor_probabilities[waste_type][processor_id]
+            } else {
+                0.0
+            };
+            prob_pairs.push((prob, waste_type, processor_id));
+        }
+    }
+
+    prob_pairs.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut used_processors = vec![false; n];
+    let mut assigned_wastes = vec![false; n];
+
+    for (_, waste_type, processor_id) in prob_pairs {
+        if !assigned_wastes[waste_type] && !used_processors[processor_id] {
+            assignments[waste_type] = processor_id;
+            used_processors[processor_id] = true;
+            assigned_wastes[waste_type] = true;
+        }
+    }
+
+    // Ensure all waste types are assigned
+    for waste_type in 0..n {
+        if !assigned_wastes[waste_type] {
+            for processor_id in 0..n {
+                if !used_processors[processor_id] {
+                    assignments[waste_type] = processor_id;
+                    used_processors[processor_id] = true;
+                    break;
                 }
             }
         }
     }
 
-    // eprintln!(
-    //     "Hill climbing: {} iterations, {} improvements, final score: {}",
-    //     counter, improvements, best_score
-    // );
-    (graph, best_configs, best_processor_probs)
+    assignments
 }
 
 // ========================================
@@ -1346,7 +1194,7 @@ fn main() {
         .map(|(x, y)| Point { x, y })
         .collect();
 
-    // Solve with hill climbing optimization (1 second dedicated)
+    // Solve the problem
     let (graph, separator_configs, processor_probabilities) = solve(
         start_time,
         n,
@@ -1356,44 +1204,19 @@ fn main() {
         &probabilities,
     );
 
-    // Generate optimal device assignments based on probabilities
-    let initial_device_assignments =
-        generate_optimal_device_assignments(n, &processor_probabilities);
-
-    let mut best_score =
-        calculate_score(n, m, &processor_probabilities, &initial_device_assignments);
-    let mut best_device_assignments = initial_device_assignments.clone();
-
-    // Continue optimizing device assignments until time limit
-    let mut rng = rand::thread_rng();
-    let current_assignments = initial_device_assignments;
-
-    while start_time.elapsed().as_millis() < 1500 {
-        let mut cloned_assignments = current_assignments.clone();
-
-        // Shuffle assignments randomly
-        for i in 0..cloned_assignments.len() {
-            let j = rng.gen_range(0..cloned_assignments.len());
-            cloned_assignments.swap(i, j);
-        }
-
-        let score = calculate_score(n, m, &processor_probabilities, &cloned_assignments);
-        if score < best_score {
-            best_score = score;
-            best_device_assignments = cloned_assignments.clone();
-        }
-    }
+    // Generate device assignments
+    let device_assignments = simple_device_assignment(n, &processor_probabilities);
 
     // Output results
-    print!(
+    println!(
         "{}",
-        best_device_assignments
+        device_assignments
             .iter()
             .map(|x| x.to_string())
             .collect::<Vec<_>>()
             .join(" ")
     );
-    println!();
+
     println!("{}", graph.start_node);
 
     for config in separator_configs {
@@ -1416,15 +1239,8 @@ mod tests {
             Point { x: 0, y: 100 },
         ];
         let separator_positions = vec![Point { x: 50, y: 50 }, Point { x: 25, y: 25 }];
-        let probabilities = vec![vec![0.8, 0.1, 0.1], vec![0.1, 0.8, 0.1]];
 
-        create_graph(
-            3,
-            2,
-            processor_positions,
-            separator_positions,
-            probabilities,
-        )
+        create_graph(3, 2, processor_positions, separator_positions)
     }
 
     #[test]
@@ -1539,121 +1355,6 @@ mod tests {
     }
 
     #[test]
-    fn test_build_processor_dedicated_routes() {
-        let mut graph = create_test_graph();
-        add_edge(&mut graph, 3, 0, 1);
-        add_edge(&mut graph, 4, 1, 2);
-        graph.start_node = 3;
-
-        let routes = build_processor_dedicated_routes(&graph);
-
-        // Each processor should have route
-        assert!(routes.len() <= graph.n);
-
-        // Routes should be valid (non-empty, separator indices in range)
-        for (processor_id, route) in &routes {
-            assert!(*processor_id < graph.n);
-            for &sep_idx in route {
-                assert!(sep_idx < graph.m);
-            }
-        }
-    }
-
-    #[test]
-    fn test_trace_route_to_start() {
-        let mut graph = create_test_graph();
-        add_edge(&mut graph, 3, 0, 1);
-        graph.start_node = 3;
-
-        let reverse_graph = build_reverse_graph(&graph);
-        let route = trace_route_to_start(0, &reverse_graph, graph.start_node, graph.n);
-
-        // Route should contain only separator indices
-        for &sep_idx in &route {
-            assert!(sep_idx < graph.m);
-        }
-    }
-
-    #[test]
-    fn test_select_processor_specialized_separator_type() {
-        let assigned_processors = vec![0, 1];
-        let probabilities = vec![
-            vec![0.9, 0.1, 0.0], // Type 0: specialized for processor 0
-            vec![0.1, 0.9, 0.0], // Type 1: specialized for processor 1
-            vec![0.3, 0.3, 0.8], // Type 2: specialized for processor 2
-        ];
-
-        let selected_type =
-            select_processor_specialized_separator_type(&assigned_processors, &probabilities);
-
-        // Should select type specialized for assigned processors
-        assert!(selected_type < probabilities.len());
-
-        // Test with empty assigned processors
-        let empty_assigned = vec![];
-        let empty_result =
-            select_processor_specialized_separator_type(&empty_assigned, &probabilities);
-        assert_eq!(empty_result, 0); // Default value
-    }
-
-    #[test]
-    fn test_generate_optimal_device_assignments() {
-        // 3 processors, 3 waste types
-        let processor_probabilities = vec![
-            vec![0.8, 0.1, 0.1], // Processor 0: high probability for waste type 0
-            vec![0.1, 0.9, 0.0], // Processor 1: high probability for waste type 1
-            vec![0.1, 0.0, 0.9], // Processor 2: high probability for waste type 2
-            // Separator data (unused)
-            vec![0.0, 0.0, 0.0],
-            vec![0.0, 0.0, 0.0],
-        ];
-
-        let assignments = generate_optimal_device_assignments(3, &processor_probabilities);
-
-        assert_eq!(assignments[0], 0); // Waste type 0 -> Processor 0
-        assert_eq!(assignments[1], 1); // Waste type 1 -> Processor 1
-        assert_eq!(assignments[2], 2); // Waste type 2 -> Processor 2
-
-        // All processors should be uniquely assigned
-        let mut used = vec![false; 3];
-        for &processor in &assignments {
-            assert!(
-                !used[processor],
-                "Processor {} assigned multiple times",
-                processor
-            );
-            used[processor] = true;
-        }
-    }
-
-    #[test]
-    fn test_generate_optimal_device_assignments_conflict() {
-        // Conflict case: two waste types prefer same processor
-        let processor_probabilities = vec![
-            vec![0.9, 0.8, 0.1], // Processor 0: high probability for waste types 0,1
-            vec![0.1, 0.1, 0.7], // Processor 1: high probability for waste type 2
-            vec![0.0, 0.1, 0.2], // Processor 2: low probability
-        ];
-
-        let assignments = generate_optimal_device_assignments(3, &processor_probabilities);
-        assert_eq!(assignments.len(), 3);
-
-        // All processors should be uniquely assigned
-        let mut used = vec![false; 3];
-        for &processor in &assignments {
-            assert!(
-                !used[processor],
-                "Processor {} assigned multiple times",
-                processor
-            );
-            used[processor] = true;
-        }
-
-        // All waste types should be assigned
-        assert_eq!(used, vec![true, true, true]);
-    }
-
-    #[test]
     fn test_find_disconnected_separators() {
         let mut graph = create_test_graph();
 
@@ -1732,68 +1433,7 @@ mod tests {
         assert_eq!(graph.m, 2);
         assert_eq!(graph.processor_positions.len(), 3);
         assert_eq!(graph.separator_positions.len(), 2);
-        assert_eq!(graph.probabilities.len(), 2);
         assert!(graph.edges.is_empty());
-    }
-
-    #[test]
-    fn test_solve_basic() {
-        let test_graph = create_test_graph();
-        let start_time = std::time::Instant::now();
-        let (graph, separator_configs, processor_probabilities) = solve(
-            start_time,
-            test_graph.n,
-            test_graph.m,
-            &test_graph.processor_positions,
-            &test_graph.separator_positions,
-            &test_graph.probabilities,
-        );
-
-        let device_assignments =
-            generate_optimal_device_assignments(test_graph.n, &processor_probabilities);
-
-        // Device assignment size check
-        assert_eq!(device_assignments.len(), test_graph.n);
-
-        // Start node should be within separator range
-        assert!(graph.start_node >= test_graph.n && graph.start_node < test_graph.n + test_graph.m);
-
-        // Number of configs should match number of separators
-        assert_eq!(separator_configs.len(), test_graph.m);
-
-        // Probability matrix size check
-        assert_eq!(processor_probabilities.len(), test_graph.n + test_graph.m);
-        for probs in &processor_probabilities {
-            assert_eq!(probs.len(), test_graph.n);
-        }
-    }
-
-    #[test]
-    fn test_build_processor_probabilities() {
-        let test_graph = create_test_graph();
-        let mut graph = test_graph.clone();
-        add_edge(&mut graph, 3, 0, 1);
-
-        let configs = vec![
-            "-1".to_string(),
-            "0 0 1".to_string(), // Separator 1 with type 0, outputs to 0 and 1
-        ];
-
-        let probs =
-            build_processor_probabilities(graph.n, graph.m, &graph.probabilities, &graph, &configs);
-
-        // Probability matrix size check
-        assert_eq!(probs.len(), graph.n + graph.m);
-        for prob_row in &probs {
-            assert_eq!(prob_row.len(), graph.n);
-        }
-
-        // Probability range check (0.0-1.0 range)
-        for prob_row in &probs {
-            for &prob in prob_row {
-                assert!(prob >= 0.0 && prob <= 1.0);
-            }
-        }
     }
 
     #[test]

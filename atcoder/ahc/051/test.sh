@@ -35,7 +35,7 @@ export -f process_file
 cargo build --bin main
 
 # Generate file numbers and pipe to xargs for parallel processing
-seq 0 49 | xargs -I {} -P 4 bash -c 'process_file "{}"'
+seq 0 49 | xargs -I {} -P 1 bash -c 'process_file "{}"'
 
 # Aggregate scores
 total_score=0
@@ -58,7 +58,6 @@ if [ $count -gt 0 ]; then
   average_score=$(echo "scale=2; $total_score / $count" | bc)
   echo "============================="
   echo "Total files processed: $count"
-  echo "Total score: $total_score"
   echo "Average score: $average_score"
 else
   echo "No scores collected"

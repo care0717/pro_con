@@ -16,7 +16,12 @@
       "mcp__serena__replace_symbol_body",
       "mcp__serena__insert_before_symbol",
       "mcp__serena__find_file",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "mcp__serena__check_onboarding_performed",
+      "mcp__serena__read_memory",
+      "Bash(./test.sh)",
+      "mcp__serena__replace_regex",
+      "Bash(timeout:*)"
     ],
     "deny": []
   }
