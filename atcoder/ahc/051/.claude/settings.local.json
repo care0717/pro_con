@@ -11,7 +11,12 @@
       "mcp__serena__find_symbol",
       "Bash(cargo build:*)",
       "Bash(cargo test)",
-      "mcp__serena__think_about_whether_you_are_done"
+      "mcp__serena__think_about_whether_you_are_done",
+      "mcp__serena__insert_after_symbol",
+      "mcp__serena__replace_symbol_body",
+      "mcp__serena__insert_before_symbol",
+      "mcp__serena__find_file",
+      "Bash(cargo test:*)"
     ],
     "deny": []
   }
