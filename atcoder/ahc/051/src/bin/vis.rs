@@ -258,8 +258,8 @@ fn main() {
                 return;
             }}
             
-            // 対応する処理装置を取得
-            const correctProcessor = outputData.ds[wasteType];
+            // 対応する処理装置を取得（ゴミ種類wasteTypeがどの処理施設に配分されているかを見つける）
+            const correctProcessor = outputData.ds.findIndex(assignedWasteType => assignedWasteType === wasteType);
             const successProb = probabilities[correctProcessor] && probabilities[correctProcessor][wasteType] ? probabilities[correctProcessor][wasteType] : 0;
             
             // 上部の情報エリアには簡潔な情報を表示
@@ -307,10 +307,28 @@ fn main() {
             groups.forEach(group => {{
                 const titleElement = group.querySelector('title');
                 const lineElement = group.querySelector('line');
+                const circleElement = group.querySelector('circle');
                 
-                if (titleElement && lineElement && titleElement.textContent.includes('edge:')) {{
-                    lineElement.style.stroke = 'gray';
-                    lineElement.style.strokeWidth = '2'; // 元の太さに戻す
+                if (titleElement) {{
+                    const titleText = titleElement.textContent;
+                    
+                    // タイトルから確率情報を削除
+                    if (titleText.includes(' | prob =')) {{
+                        const originalTitle = titleText.split(' | prob =')[0];
+                        titleElement.textContent = originalTitle;
+                    }}
+                    
+                    // エッジの色をリセット
+                    if (lineElement && titleText.includes('edge:')) {{
+                        lineElement.style.stroke = 'gray';
+                        lineElement.style.strokeWidth = '2'; // 元の太さに戻す
+                    }}
+                    
+                    // ノードの色をリセット
+                    if (circleElement && (titleText.includes('node:') || titleText.includes('vertex:'))) {{
+                        circleElement.style.fill = '';
+                        circleElement.style.fillOpacity = '';
+                    }}
                 }}
             }});
             
@@ -333,21 +351,22 @@ fn main() {
             groups.forEach(group => {{
                 const titleElement = group.querySelector('title');
                 const lineElement = group.querySelector('line');
+                const circleElement = group.querySelector('circle');
                 
-                if (!titleElement || !lineElement) {{
-                    return; // タイトルまたは線がない場合はスキップ
+                if (!titleElement) {{
+                    return; // タイトルがない場合はスキップ
                 }}
                 
                 const titleText = titleElement.textContent;
                 console.log('Found title:', titleText);
                 
-                // エッジ（線）の場合のみ処理
-                if (titleText.includes('edge:')) {{
+                // エッジ（線）の場合
+                if (titleText.includes('edge:') && lineElement) {{
                     let prob = 0;
                     
                     if (titleText.includes('inlet -')) {{
-                        // 搬入口からの線分 - 開始ノード（搬入口）の確率を使用
-                        prob = 1.0; // 搬入口からの線分は常に100%通過
+                        // 搬入口からの線分 - 常に100%の確率で通る
+                        prob = 1.0;
                         console.log('Inlet case: prob = 1.0');
                     }} else {{
                         // 分別器からの線分 - 実際の線分通過確率を計算
@@ -373,8 +392,53 @@ fn main() {
                     lineElement.style.stroke = color;
                     lineElement.style.strokeWidth = '3'; // 少し太くして見やすく
                     
+                    // ホバー情報に確率を追加
+                    const originalTitle = titleText;
+                    titleElement.textContent = `${{originalTitle}} | prob = ${{(prob * 100).toFixed(1)}}%`;
+                    
                     elementsUpdated++;
-                    console.log(`Updated edge: ${{titleText}} -> prob: ${{prob.toFixed(3)}} -> color: ${{color}}`);
+                    console.log(`Updated edge: ${{originalTitle}} -> prob: ${{prob.toFixed(3)}} -> color: ${{color}}`);
+                }}
+                
+                // ノード（頂点）の場合
+                else if (titleText.includes('node:') && circleElement) {{
+                    // ノードの確率を取得
+                    const nodeMatch = titleText.match(/node: (\d+)/);
+                    if (nodeMatch) {{
+                        const nodeId = parseInt(nodeMatch[1]);
+                        const nodeProb = probabilities[nodeId] && probabilities[nodeId][wasteType] ? probabilities[nodeId][wasteType] : 0;
+                        
+                        const color = getColor(nodeProb);
+                        circleElement.style.fill = color;
+                        circleElement.style.fillOpacity = '0.7'; // 少し透明にして見やすく
+                        
+                        // ホバー情報に確率を追加
+                        const originalTitle = titleText;
+                        titleElement.textContent = `${{originalTitle}} | prob = ${{(nodeProb * 100).toFixed(1)}}%`;
+                        
+                        elementsUpdated++;
+                        console.log(`Updated node: ${{originalTitle}} -> prob: ${{nodeProb.toFixed(3)}} -> color: ${{color}}`);
+                    }}
+                }}
+                
+                // 頂点（vertex）の場合も処理
+                else if (titleText.includes('vertex:') && circleElement) {{
+                    const vertexMatch = titleText.match(/vertex: (\d+)/);
+                    if (vertexMatch) {{
+                        const nodeId = parseInt(vertexMatch[1]);
+                        const nodeProb = probabilities[nodeId] && probabilities[nodeId][wasteType] ? probabilities[nodeId][wasteType] : 0;
+                        
+                        const color = getColor(nodeProb);
+                        circleElement.style.fill = color;
+                        circleElement.style.fillOpacity = '0.7'; // 少し透明にして見やすく
+                        
+                        // ホバー情報に確率を追加
+                        const originalTitle = titleText;
+                        titleElement.textContent = `${{originalTitle}} | prob = ${{(nodeProb * 100).toFixed(1)}}%`;
+                        
+                        elementsUpdated++;
+                        console.log(`Updated vertex: ${{originalTitle}} -> prob: ${{nodeProb.toFixed(3)}} -> color: ${{color}}`);
+                    }}
                 }}
             }});
             

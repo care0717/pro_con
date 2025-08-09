@@ -363,25 +363,14 @@ fn build_network_greedy(graph: Graph) -> Graph {
     let start_pos = Point { x: 0, y: 5000 };
     const ENTRANCE_NODE: NodeId = usize::MAX;
 
-    // Find best entrance separator (closest to entrance + good centrality)
-    let mut best_sep = 0;
+    // 搬入口とつなげるものとして、入口との距離（短い方が良い）で選ぶ
+    let mut best_sep: usize = 0;
     let mut best_score = f64::MAX;
 
     for i in 0..graph.separator_positions.len() {
         let dist_to_entrance = distance(start_pos, graph.separator_positions[i]);
-
-        // Calculate average distance to processors (centrality)
-        let mut total_dist = 0.0;
-        for &proc_pos in &graph.processor_positions {
-            total_dist += distance(graph.separator_positions[i], proc_pos);
-        }
-        let avg_dist = total_dist / graph.processor_positions.len() as f64;
-
-        // Combined score: favor close to entrance but also central
-        let combined_score = dist_to_entrance * 0.4 + avg_dist * 0.6;
-
-        if combined_score < best_score {
-            best_score = combined_score;
+        if dist_to_entrance < best_score {
+            best_score = dist_to_entrance;
             best_sep = i;
         }
     }
@@ -573,7 +562,7 @@ fn connect_graph(graph: &Graph) -> Graph {
 
                 candidates
                     .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-
+                let mut push_new = false;
                 // Try candidates that provide new reachability
                 for &(_, node_id) in &candidates {
                     if node_id == out.out1 || node_id == out.out2 {
@@ -622,9 +611,13 @@ fn connect_graph(graph: &Graph) -> Graph {
                             work_graph.edges.insert(current, new_out.clone());
                             queue.push_back(new_out.out1);
                             queue.push_back(new_out.out2);
+                            push_new = true;
                             break;
                         }
                     }
+                }
+                if !push_new {
+                    queue.push_back(out.out1);
                 }
                 counter += 1;
             } else {
