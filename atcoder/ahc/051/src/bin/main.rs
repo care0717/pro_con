@@ -104,36 +104,6 @@ struct WeightedReachability {
     distance_weight: f64,
 }
 
-/// Pre-computed probability cache for fast score calculation
-#[derive(Clone, Debug)]
-struct ProbabilityCache {
-    /// Topological order of nodes for efficient propagation
-    topo_order: Vec<NodeId>,
-    /// Adjacency list for graph traversal
-    adjacency: Vec<Vec<NodeId>>,
-    /// Base probability matrix (before separator type changes)
-    base_probs: Vec<Vec<f64>>, // [node_id][waste_type]
-    /// Current separator types configuration
-    separator_types: Vec<usize>,
-    /// Cached optimal assignments
-    cached_assignments: Vec<usize>,
-    /// Last computed score
-    cached_score: i64,
-}
-
-/// Fast differential probability update structure
-#[derive(Clone, Debug)]
-struct DifferentialUpdate {
-    /// Changed separator indices
-    changed_separators: Vec<usize>,
-    /// Old types of changed separators
-    old_types: Vec<usize>,
-    /// New types of changed separators
-    new_types: Vec<usize>,
-    /// Affected downstream nodes (topologically sorted)
-    affected_nodes: Vec<NodeId>,
-}
-
 // ========================================
 // GEOMETRIC UTILITIES
 // ========================================
@@ -710,48 +680,22 @@ fn remove_disconnected_separators(graph: &mut Graph) {
 // PROBABILITY CALCULATION
 // ========================================
 
-/// Build processor probabilities using topological sort
+/// Optimized probability calculation with cached topological sort and adjacency list
 fn build_processor_probabilities(
     n: usize,
     m: usize,
     probabilities: &Vec<Vec<f64>>,
     graph: &Graph,
     configs: &Vec<String>,
+    topo_order: &Vec<NodeId>,
 ) -> Vec<Vec<f64>> {
     let mut probs = mat![0.0; n + m; n];
-
-    // Build adjacency list from configs
-    let mut g = vec![vec![]; n + m];
-    for (sep_idx, config) in configs.iter().enumerate() {
-        if config != "-1" {
-            let parts: Vec<&str> = config.split_whitespace().collect();
-            if parts.len() == 3 {
-                if let (Ok(_k), Ok(v1), Ok(v2)) = (
-                    parts[0].parse::<usize>(),
-                    parts[1].parse::<usize>(),
-                    parts[2].parse::<usize>(),
-                ) {
-                    if v1 < n + m && v2 < n + m {
-                        let sep_node = n + sep_idx;
-                        g[sep_node].push(v1);
-                        g[sep_node].push(v2);
-                    }
-                }
-            }
-        }
-    }
-
-    // Topological sort
-    let Some(order) = topological_sort(&g) else {
-        eprintln!("Warning: Graph contains a cycle in build_processor_probabilities");
-        return probs;
-    };
 
     // Set start node probabilities
     probs[graph.start_node].fill(1.0);
 
     // Propagate probabilities in topological order
-    for u in order {
+    for &u in topo_order {
         if u >= n {
             let sep_idx = u - n;
             if sep_idx < configs.len() {
@@ -778,479 +722,6 @@ fn build_processor_probabilities(
     }
 
     probs
-}
-
-/// Optimized probability calculation with cached topological sort and adjacency list
-fn build_processor_probabilities_optimized(
-    n: usize,
-    m: usize,
-    probabilities: &Vec<Vec<f64>>,
-    graph: &Graph,
-    configs: &Vec<String>,
-    cached_adjacency: &Option<Vec<Vec<NodeId>>>,
-    cached_topo_order: &Option<Vec<NodeId>>,
-) -> Vec<Vec<f64>> {
-    let mut probs = mat![0.0; n + m; n];
-
-    // Build or use cached adjacency list
-    let adjacency = if let Some(adj) = cached_adjacency {
-        adj.clone()
-    } else {
-        let mut g = vec![vec![]; n + m];
-        for (sep_idx, config) in configs.iter().enumerate() {
-            if config != "-1" {
-                let parts: Vec<&str> = config.split_whitespace().collect();
-                if parts.len() == 3 {
-                    if let (Ok(_k), Ok(v1), Ok(v2)) = (
-                        parts[0].parse::<usize>(),
-                        parts[1].parse::<usize>(),
-                        parts[2].parse::<usize>(),
-                    ) {
-                        if v1 < n + m && v2 < n + m {
-                            let sep_node = n + sep_idx;
-                            g[sep_node].push(v1);
-                            g[sep_node].push(v2);
-                        }
-                    }
-                }
-            }
-        }
-        g
-    };
-
-    // Use cached or compute topological order
-    let order = if let Some(topo) = cached_topo_order {
-        topo.clone()
-    } else {
-        let Some(order) = topological_sort(&adjacency) else {
-            eprintln!("Warning: Graph contains a cycle in build_processor_probabilities_optimized");
-            return probs;
-        };
-        order
-    };
-
-    // Set start node probabilities
-    probs[graph.start_node].fill(1.0);
-
-    // Propagate probabilities in topological order
-    for u in order {
-        if u >= n {
-            let sep_idx = u - n;
-            if sep_idx < configs.len() {
-                let config = &configs[sep_idx];
-                if config != "-1" {
-                    let parts: Vec<&str> = config.split_whitespace().collect();
-                    if parts.len() == 3 {
-                        if let (Ok(k), Ok(v1), Ok(v2)) = (
-                            parts[0].parse::<usize>(),
-                            parts[1].parse::<usize>(),
-                            parts[2].parse::<usize>(),
-                        ) {
-                            if k < probabilities.len() && v1 < n + m && v2 < n + m {
-                                for i in 0..n {
-                                    probs[v1][i] += probs[u][i] * probabilities[k][i];
-                                    probs[v2][i] += probs[u][i] * (1.0 - probabilities[k][i]);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    probs
-}
-
-/// Check if only separator types changed (topology unchanged)
-fn only_separator_types_changed(old_configs: &Vec<String>, new_configs: &Vec<String>) -> bool {
-    if old_configs.len() != new_configs.len() {
-        return false;
-    }
-
-    for i in 0..old_configs.len() {
-        if old_configs[i] == "-1" && new_configs[i] == "-1" {
-            continue;
-        }
-        if old_configs[i] == "-1" || new_configs[i] == "-1" {
-            return false; // Connection status changed
-        }
-
-        let old_parts: Vec<&str> = old_configs[i].split_whitespace().collect();
-        let new_parts: Vec<&str> = new_configs[i].split_whitespace().collect();
-
-        if old_parts.len() != 3 || new_parts.len() != 3 {
-            return false;
-        }
-
-        // Check if only separator type (first element) is different
-        if old_parts[1] != new_parts[1] || old_parts[2] != new_parts[2] {
-            return false; // Topology changed
-        }
-    }
-
-    true
-}
-
-/// Get changed separator indices and types
-fn get_separator_type_changes(
-    old_configs: &Vec<String>,
-    new_configs: &Vec<String>,
-) -> Option<(Vec<usize>, Vec<usize>, Vec<usize>)> {
-    if !only_separator_types_changed(old_configs, new_configs) {
-        return None;
-    }
-
-    let mut changed_separators = Vec::new();
-    let mut old_types = Vec::new();
-    let mut new_types = Vec::new();
-
-    for i in 0..old_configs.len() {
-        if old_configs[i] != new_configs[i] && old_configs[i] != "-1" && new_configs[i] != "-1" {
-            let old_parts: Vec<&str> = old_configs[i].split_whitespace().collect();
-            let new_parts: Vec<&str> = new_configs[i].split_whitespace().collect();
-
-            if old_parts.len() == 3 && new_parts.len() == 3 {
-                if let (Ok(old_type), Ok(new_type)) =
-                    (old_parts[0].parse::<usize>(), new_parts[0].parse::<usize>())
-                {
-                    changed_separators.push(i);
-                    old_types.push(old_type);
-                    new_types.push(new_type);
-                }
-            }
-        }
-    }
-
-    Some((changed_separators, old_types, new_types))
-}
-
-/// Ultra-safe differential probability update (only when topology unchanged)
-fn build_processor_probabilities_differential_safe(
-    n: usize,
-    m: usize,
-    probabilities: &Vec<Vec<f64>>,
-    graph: &Graph,
-    new_configs: &Vec<String>,
-    old_configs: &Vec<String>,
-    cached_adjacency: &Vec<Vec<NodeId>>,
-    cached_topo_order: &Vec<NodeId>,
-    base_probs: &Vec<Vec<f64>>,
-) -> Option<Vec<Vec<f64>>> {
-    // Check if we can use differential update
-    let changes = get_separator_type_changes(old_configs, new_configs)?;
-    let (changed_separators, _old_types, new_types) = changes;
-
-    if changed_separators.is_empty() || changed_separators.len() > 3 {
-        return None; // Too many changes, fallback to full calculation
-    }
-
-    // Start with base probabilities
-    let mut probs = base_probs.clone();
-
-    // Find affected nodes (downstream from changed separators)
-    let mut affected_nodes = HashSet::new();
-    for &sep_idx in &changed_separators {
-        let sep_node = n + sep_idx;
-
-        // BFS to find all downstream nodes
-        let mut queue = VecDeque::new();
-        queue.push_back(sep_node);
-
-        while let Some(current) = queue.pop_front() {
-            if !affected_nodes.contains(&current) {
-                affected_nodes.insert(current);
-
-                if current < cached_adjacency.len() {
-                    for &neighbor in &cached_adjacency[current] {
-                        if !affected_nodes.contains(&neighbor) {
-                            queue.push_back(neighbor);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Reset probabilities for affected nodes only
-    for &node in &affected_nodes {
-        if node < probs.len() {
-            probs[node].fill(0.0);
-        }
-    }
-
-    // Restore start node
-    probs[graph.start_node].fill(1.0);
-
-    // Propagate through affected nodes only
-    for &u in cached_topo_order {
-        if !affected_nodes.contains(&u) {
-            continue;
-        }
-
-        if u >= n {
-            let sep_idx = u - n;
-            if sep_idx < new_configs.len() {
-                let config = &new_configs[sep_idx];
-                if config != "-1" {
-                    let parts: Vec<&str> = config.split_whitespace().collect();
-                    if parts.len() == 3 {
-                        if let (Ok(k), Ok(v1), Ok(v2)) = (
-                            parts[0].parse::<usize>(),
-                            parts[1].parse::<usize>(),
-                            parts[2].parse::<usize>(),
-                        ) {
-                            if k < probabilities.len() && v1 < n + m && v2 < n + m {
-                                for i in 0..n {
-                                    probs[v1][i] += probs[u][i] * probabilities[k][i];
-                                    probs[v2][i] += probs[u][i] * (1.0 - probabilities[k][i]);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Some(probs)
-}
-
-/// Initialize probability cache for fast differential updates
-fn initialize_probability_cache(
-    n: usize,
-    m: usize,
-    graph: &Graph,
-    configs: &Vec<String>,
-    probabilities: &Vec<Vec<f64>>,
-) -> ProbabilityCache {
-    // Build adjacency list from configs
-    let mut adjacency = vec![vec![]; n + m];
-    let mut separator_types = vec![0; m];
-
-    for (sep_idx, config) in configs.iter().enumerate() {
-        if config != "-1" {
-            let parts: Vec<&str> = config.split_whitespace().collect();
-            if parts.len() == 3 {
-                if let (Ok(k), Ok(v1), Ok(v2)) = (
-                    parts[0].parse::<usize>(),
-                    parts[1].parse::<usize>(),
-                    parts[2].parse::<usize>(),
-                ) {
-                    if v1 < n + m && v2 < n + m {
-                        let sep_node = n + sep_idx;
-                        adjacency[sep_node].push(v1);
-                        adjacency[sep_node].push(v2);
-                        separator_types[sep_idx] = k;
-                    }
-                }
-            }
-        }
-    }
-
-    // Get topological order for efficient propagation
-    let topo_order = topological_sort(&adjacency).unwrap_or_else(|| (0..n + m).collect());
-
-    // Compute initial probability matrix
-    let base_probs = build_processor_probabilities(n, m, probabilities, graph, configs);
-
-    // Compute initial optimal assignments and score
-    let cached_assignments = generate_optimal_device_assignments(n, &base_probs);
-    let cached_score = calculate_score(n, m, &base_probs, &cached_assignments);
-
-    ProbabilityCache {
-        topo_order,
-        adjacency,
-        base_probs,
-        separator_types,
-        cached_assignments,
-        cached_score,
-    }
-}
-
-/// Fast differential probability update (only recalculate affected nodes)
-fn update_probability_cache_differential(
-    cache: &mut ProbabilityCache,
-    update: &DifferentialUpdate,
-    n: usize,
-    m: usize,
-    graph: &Graph,
-    probabilities: &Vec<Vec<f64>>,
-) {
-    // Update separator types
-    for i in 0..update.changed_separators.len() {
-        let sep_idx = update.changed_separators[i];
-        cache.separator_types[sep_idx] = update.new_types[i];
-    }
-
-    // Find all nodes affected by the changes (downstream propagation)
-    let mut affected_set = HashSet::new();
-    for &sep_idx in &update.changed_separators {
-        let sep_node = n + sep_idx;
-        affected_set.insert(sep_node);
-
-        // Add all downstream nodes using BFS
-        let mut queue = VecDeque::new();
-        queue.push_back(sep_node);
-
-        while let Some(current) = queue.pop_front() {
-            if let Some(neighbors) = cache.adjacency.get(current) {
-                for &neighbor in neighbors {
-                    if !affected_set.contains(&neighbor) {
-                        affected_set.insert(neighbor);
-                        queue.push_back(neighbor);
-                    }
-                }
-            }
-        }
-    }
-
-    // Reset probabilities for affected nodes
-    for &node in &affected_set {
-        if node < cache.base_probs.len() {
-            cache.base_probs[node].fill(0.0);
-        }
-    }
-
-    // Set start node probabilities
-    if !affected_set.contains(&graph.start_node) {
-        // If start node not affected, no need to recalculate
-        cache.base_probs[graph.start_node].fill(1.0);
-    } else {
-        cache.base_probs[graph.start_node].fill(1.0);
-    }
-
-    // Propagate probabilities only through affected nodes (in topological order)
-    for &u in &cache.topo_order {
-        if !affected_set.contains(&u) && u != graph.start_node {
-            continue; // Skip unaffected nodes
-        }
-
-        if u >= n {
-            let sep_idx = u - n;
-            if sep_idx < cache.separator_types.len() {
-                let k = cache.separator_types[sep_idx];
-                if k < probabilities.len() && cache.adjacency[u].len() >= 2 {
-                    let v1 = cache.adjacency[u][0];
-                    let v2 = cache.adjacency[u][1];
-
-                    if v1 < n + m && v2 < n + m {
-                        for i in 0..n {
-                            if u < cache.base_probs.len() {
-                                cache.base_probs[v1][i] +=
-                                    cache.base_probs[u][i] * probabilities[k][i];
-                                cache.base_probs[v2][i] +=
-                                    cache.base_probs[u][i] * (1.0 - probabilities[k][i]);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Recompute optimal assignments and score
-    cache.cached_assignments = generate_optimal_device_assignments(n, &cache.base_probs);
-    cache.cached_score = calculate_score(n, m, &cache.base_probs, &cache.cached_assignments);
-}
-
-/// Create differential update structure for batch separator changes
-fn create_differential_update(
-    changed_separators: Vec<usize>,
-    old_types: Vec<usize>,
-    new_types: Vec<usize>,
-    n: usize,
-    adjacency: &Vec<Vec<NodeId>>,
-) -> DifferentialUpdate {
-    // Find all affected downstream nodes
-    let mut affected_nodes = HashSet::new();
-
-    for &sep_idx in &changed_separators {
-        let sep_node = n + sep_idx;
-        affected_nodes.insert(sep_node);
-
-        // BFS to find all downstream nodes
-        let mut queue = VecDeque::new();
-        queue.push_back(sep_node);
-
-        while let Some(current) = queue.pop_front() {
-            if let Some(neighbors) = adjacency.get(current) {
-                for &neighbor in neighbors {
-                    if !affected_nodes.contains(&neighbor) {
-                        affected_nodes.insert(neighbor);
-                        queue.push_back(neighbor);
-                    }
-                }
-            }
-        }
-    }
-
-    // Convert to sorted vector for efficient processing
-    let mut affected_nodes_vec: Vec<NodeId> = affected_nodes.into_iter().collect();
-    affected_nodes_vec.sort();
-
-    DifferentialUpdate {
-        changed_separators,
-        old_types,
-        new_types,
-        affected_nodes: affected_nodes_vec,
-    }
-}
-
-/// Fast score calculation using memoization
-fn calculate_score_fast(cache: &ProbabilityCache, n: usize, m: usize) -> i64 {
-    // Return cached score if available
-    cache.cached_score
-}
-
-/// Test if separator type changes would improve score (without full computation)
-fn would_improve_score_fast(
-    cache: &mut ProbabilityCache,
-    changed_separators: &Vec<usize>,
-    new_types: &Vec<usize>,
-    n: usize,
-    m: usize,
-    graph: &Graph,
-    probabilities: &Vec<Vec<f64>>,
-) -> (bool, i64) {
-    // Save current state
-    let old_types: Vec<usize> = changed_separators
-        .iter()
-        .map(|&sep_idx| cache.separator_types[sep_idx])
-        .collect();
-    let old_score = cache.cached_score;
-    let old_probs = cache.base_probs.clone();
-    let old_assignments = cache.cached_assignments.clone();
-
-    // Create and apply differential update
-    let update = create_differential_update(
-        changed_separators.clone(),
-        old_types.clone(),
-        new_types.clone(),
-        n,
-        &cache.adjacency,
-    );
-
-    update_probability_cache_differential(cache, &update, n, m, graph, probabilities);
-
-    let new_score = cache.cached_score;
-    let improved = new_score < old_score;
-
-    if !improved {
-        // Restore old state if not improved
-        cache.separator_types = changed_separators.iter().zip(old_types.iter()).fold(
-            cache.separator_types.clone(),
-            |mut types, (&sep_idx, &old_type)| {
-                types[sep_idx] = old_type;
-                types
-            },
-        );
-        cache.cached_score = old_score;
-        cache.base_probs = old_probs;
-        cache.cached_assignments = old_assignments;
-    }
-
-    (improved, new_score)
 }
 
 // ========================================
@@ -1589,24 +1060,23 @@ fn generate_optimal_device_assignments(
 fn generate_optimal_device_assignments_fast(
     n: usize,
     processor_probabilities: &Vec<Vec<f64>>,
-    cached_assignments: &Option<Vec<usize>>,
+    assignments: &Vec<usize>,
 ) -> Vec<usize> {
     // Use cached assignments if probability pattern is similar
-    if let Some(cached) = cached_assignments {
-        // Simple heuristic: if cached assignment still looks reasonable, use it
-        let mut total_prob = 0.0;
-        for i in 0..n {
-            if cached[i] < processor_probabilities.len()
-                && i < processor_probabilities[cached[i]].len()
-            {
-                total_prob += processor_probabilities[cached[i]][i];
-            }
-        }
 
-        // If cached assignments give reasonable probabilities (>50% on average), keep them
-        if total_prob / n as f64 > 0.5 {
-            return cached.clone();
+    // Simple heuristic: if cached assignment still looks reasonable, use it
+    let mut total_prob = 0.0;
+    for i in 0..n {
+        if assignments[i] < processor_probabilities.len()
+            && i < processor_probabilities[assignments[i]].len()
+        {
+            total_prob += processor_probabilities[assignments[i]][i];
         }
+    }
+
+    // If cached assignments give reasonable probabilities (>50% on average), keep them
+    if total_prob / n as f64 > 0.5 {
+        return assignments.clone();
     }
 
     // Fallback to full calculation
@@ -1614,15 +1084,18 @@ fn generate_optimal_device_assignments_fast(
 }
 
 /// Fast score calculation with cached assignments
-fn calculate_score_with_optimal_assignments_fast(
+fn calculate_score_with_optimal_assignments(
     n: usize,
     m: usize,
     processor_probabilities: &Vec<Vec<f64>>,
-    cached_assignments: &Option<Vec<usize>>,
-) -> i64 {
-    let assignments =
-        generate_optimal_device_assignments_fast(n, processor_probabilities, cached_assignments);
-    calculate_score(n, m, processor_probabilities, &assignments)
+    assignments: &Vec<usize>,
+) -> (i64, Vec<usize>) {
+    let optimal_assignments =
+        generate_optimal_device_assignments_fast(n, processor_probabilities, assignments);
+    (
+        calculate_score(n, m, processor_probabilities, &optimal_assignments),
+        optimal_assignments,
+    )
 }
 
 /// Calculate score
@@ -1640,16 +1113,6 @@ fn calculate_score(
     }
     score /= n as f64;
     (1e9 * score).round() as i64
-}
-
-/// Calculate score with optimal assignments
-fn calculate_score_with_optimal_assignments(
-    n: usize,
-    _m: usize,
-    processor_probabilities: &Vec<Vec<f64>>,
-) -> i64 {
-    let optimal_assignments = generate_optimal_device_assignments(n, processor_probabilities);
-    calculate_score(n, _m, processor_probabilities, &optimal_assignments)
 }
 
 /// Main solving function with stage-2 optimization (safe cached topology + assignments)
@@ -1677,18 +1140,18 @@ fn solve(
     let mut rng = rand::thread_rng();
 
     // Find modifiable separators (out1 != out2)
-    let mut modifiable_separators = Vec::new();
-    for (&node_id, out) in &graph.edges {
-        if node_id >= n && out.out1 != out.out2 {
-            modifiable_separators.push(node_id - n);
-        }
-    }
+    let modifiable_separators = &graph
+        .edges
+        .iter()
+        .filter(|(&node_id, &ref out)| out.out1 != out.out2 && node_id >= n)
+        .map(|(node_id, _)| node_id - n)
+        .collect::<Vec<_>>();
 
     // Initial configuration calculation
     let mut best_configs = generate_configs_from_graph(&graph);
 
     // Stage 1 optimization: Pre-compute adjacency list and topological order
-    let mut cached_adjacency = vec![vec![]; n + m];
+    let mut adjacency = vec![vec![]; n + m];
     for (sep_idx, config) in best_configs.iter().enumerate() {
         if config != "-1" {
             let parts: Vec<&str> = config.split_whitespace().collect();
@@ -1700,45 +1163,29 @@ fn solve(
                 ) {
                     if v1 < n + m && v2 < n + m {
                         let sep_node = n + sep_idx;
-                        cached_adjacency[sep_node].push(v1);
-                        cached_adjacency[sep_node].push(v2);
+                        adjacency[sep_node].push(v1);
+                        adjacency[sep_node].push(v2);
                     }
                 }
             }
         }
     }
 
-    let cached_topo_order =
-        topological_sort(&cached_adjacency).unwrap_or_else(|| (0..n + m).collect());
+    let topo_order = topological_sort(&adjacency).unwrap_or_else(|| (0..n + m).collect());
 
     // Use optimized probability calculation (stage 1 only)
-    let mut best_processor_probs = build_processor_probabilities_optimized(
-        n,
-        m,
-        &probabilities,
-        &graph,
-        &best_configs,
-        &Some(cached_adjacency.clone()),
-        &Some(cached_topo_order.clone()),
-    );
+    let mut best_processor_probs =
+        build_processor_probabilities(n, m, &probabilities, &graph, &best_configs, &topo_order);
 
     // Stage 2 optimization: Cache initial device assignments
-    let mut cached_assignments = Some(generate_optimal_device_assignments(
-        n,
-        &best_processor_probs,
-    ));
-    let mut best_score = calculate_score_with_optimal_assignments_fast(
-        n,
-        m,
-        &best_processor_probs,
-        &cached_assignments,
-    );
+    let initial_assignments = generate_optimal_device_assignments(n, &best_processor_probs);
+    let (mut best_score, mut best_assignments) =
+        calculate_score_with_optimal_assignments(n, m, &best_processor_probs, &initial_assignments);
 
     // Hill climbing with stage 1+2 optimizations (NO stage 3 differential updates)
     let mut counter = 0;
     let mut improvements = 0;
-
-    while start_time.elapsed().as_millis() < 1700 && !modifiable_separators.is_empty() {
+    while start_time.elapsed().as_millis() < 1900 && !modifiable_separators.is_empty() {
         counter += 1;
 
         // Dynamic batch size based on improvement rate
@@ -1797,34 +1244,28 @@ fn solve(
 
         // Use ONLY stage 1+2 optimizations (cached topology + fast assignments)
         if all_changes_valid && !selected_separators.is_empty() {
-            let new_processor_probs = build_processor_probabilities_optimized(
+            let new_processor_probs = build_processor_probabilities(
                 n,
                 m,
                 &probabilities,
                 &graph,
                 &new_configs,
-                &Some(cached_adjacency.clone()),
-                &Some(cached_topo_order.clone()),
+                &topo_order,
             );
-            let new_score = calculate_score_with_optimal_assignments_fast(
+            let (new_score, new_assignments) = calculate_score_with_optimal_assignments(
                 n,
                 m,
                 &new_processor_probs,
-                &cached_assignments,
+                &best_assignments,
             );
 
             // Accept entire batch if improved
             if new_score < best_score {
                 best_score = new_score;
+                best_assignments = new_assignments;
                 best_configs = new_configs;
                 best_processor_probs = new_processor_probs;
                 improvements += 1;
-
-                // Update cached assignments for next iteration
-                cached_assignments = Some(generate_optimal_device_assignments(
-                    n,
-                    &best_processor_probs,
-                ));
             }
         }
 
@@ -1848,40 +1289,38 @@ fn solve(
                 if let Some(out) = graph.edges.get(&(n + single_sep)) {
                     single_config[single_sep] = format!("{} {} {}", new_type, out.out1, out.out2);
 
-                    let single_probs = build_processor_probabilities_optimized(
+                    let single_probs = build_processor_probabilities(
                         n,
                         m,
                         &probabilities,
                         &graph,
                         &single_config,
-                        &Some(cached_adjacency.clone()),
-                        &Some(cached_topo_order.clone()),
+                        &topo_order,
                     );
-                    let single_score = calculate_score_with_optimal_assignments_fast(
-                        n,
-                        m,
-                        &single_probs,
-                        &cached_assignments,
-                    );
+                    let (single_score, single_assignments) =
+                        calculate_score_with_optimal_assignments(
+                            n,
+                            m,
+                            &single_probs,
+                            &best_assignments,
+                        );
 
                     if single_score < best_score {
                         best_score = single_score;
+                        best_assignments = single_assignments;
                         best_configs = single_config;
                         best_processor_probs = single_probs;
                         improvements += 1;
-
-                        // Update cached assignments
-                        cached_assignments = Some(generate_optimal_device_assignments(
-                            n,
-                            &best_processor_probs,
-                        ));
                     }
                 }
             }
         }
     }
 
-    // eprintln!("Stage-2 Hill climbing (SAFE): {} iterations, {} improvements, final score: {}", counter, improvements, best_score);
+    // eprintln!(
+    //     "Hill climbing: {} iterations, {} improvements, final score: {}",
+    //     counter, improvements, best_score
+    // );
     (graph, best_configs, best_processor_probs)
 }
 
@@ -2355,89 +1794,6 @@ mod tests {
                 assert!(prob >= 0.0 && prob <= 1.0);
             }
         }
-    }
-
-    #[test]
-    fn test_calculate_score_functions() {
-        let n = 3;
-        let processor_probs = vec![
-            vec![0.8, 0.1, 0.1], // Processor 0
-            vec![0.1, 0.8, 0.1], // Processor 1
-            vec![0.1, 0.1, 0.8], // Processor 2
-        ];
-        let assignments = vec![0, 1, 2]; // Each waste type to corresponding processor
-
-        let score = calculate_score(n, 0, &processor_probs, &assignments);
-        assert!(score >= 0); // Score should be non-negative
-
-        let score_with_optimal = calculate_score_with_optimal_assignments(n, 0, &processor_probs);
-        assert!(score_with_optimal >= 0); // Score should be non-negative
-        assert!(score_with_optimal <= score); // Optimal assignment should be <= original
-    }
-
-    #[test]
-    fn test_initialize_probability_cache() {
-        let mut graph = create_test_graph();
-        add_edge(&mut graph, 3, 0, 1);
-        graph.start_node = 3;
-
-        let configs = vec!["0 0 1".to_string(), "-1".to_string()];
-
-        let cache =
-            initialize_probability_cache(graph.n, graph.m, &graph, &configs, &graph.probabilities);
-
-        // Check cache structure
-        assert_eq!(cache.separator_types.len(), graph.m);
-        assert_eq!(cache.separator_types[0], 0);
-        assert_eq!(cache.base_probs.len(), graph.n + graph.m);
-        assert!(cache.cached_score >= 0);
-        assert_eq!(cache.cached_assignments.len(), graph.n);
-    }
-
-    #[test]
-    fn test_fast_differential_update() {
-        let mut graph = create_test_graph();
-        add_edge(&mut graph, 3, 0, 1);
-        graph.start_node = 3;
-
-        let configs = vec!["0 0 1".to_string(), "-1".to_string()];
-
-        let mut cache =
-            initialize_probability_cache(graph.n, graph.m, &graph, &configs, &graph.probabilities);
-
-        let old_score = cache.cached_score;
-
-        // Test differential update
-        let (improved, new_score) = would_improve_score_fast(
-            &mut cache,
-            &vec![0], // Change separator 0
-            &vec![1], // To type 1
-            graph.n,
-            graph.m,
-            &graph,
-            &graph.probabilities,
-        );
-
-        // Should have a result (improved or not)
-        assert!(new_score >= 0);
-
-        // If not improved, score should be restored
-        if !improved {
-            assert_eq!(cache.cached_score, old_score);
-        }
-    }
-
-    #[test]
-    fn test_calculate_score_fast() {
-        let graph = create_test_graph();
-        let configs = vec!["0 0 1".to_string(), "-1".to_string()];
-
-        let cache =
-            initialize_probability_cache(graph.n, graph.m, &graph, &configs, &graph.probabilities);
-
-        let fast_score = calculate_score_fast(&cache, graph.n, graph.m);
-        assert_eq!(fast_score, cache.cached_score);
-        assert!(fast_score >= 0);
     }
 
     #[test]
