@@ -999,16 +999,12 @@ fn solve(
         let mut available = modifiable_separators.clone();
 
         for _ in 0..batch_size {
-            if available.is_empty() {
-                break;
-            }
             let idx = rng.gen_range(0..available.len());
             selected_separators.push(available.remove(idx));
         }
 
         // Create new configuration
         let mut new_configs = best_configs.clone();
-        let mut all_valid = true;
 
         for &sep_idx in &selected_separators {
             let current_type = if best_configs[sep_idx] != "-1" {
@@ -1053,33 +1049,21 @@ fn solve(
                 new_type
             };
 
-            if let Some(out) = graph.edges.get(&(n + sep_idx)) {
-                new_configs[sep_idx] = format!("{} {} {}", new_type, out.out1, out.out2);
-            } else {
-                all_valid = false;
-                break;
-            }
+            let out = graph.edges.get(&(n + sep_idx)).unwrap();
+            new_configs[sep_idx] = format!("{} {} {}", new_type, out.out1, out.out2);
         }
 
-        if all_valid && !selected_separators.is_empty() {
-            let new_probs = build_processor_probabilities(
-                n,
-                m,
-                &probabilities,
-                &graph,
-                &new_configs,
-                &topo_order,
-            );
+        let new_probs =
+            build_processor_probabilities(n, m, &probabilities, &graph, &new_configs, &topo_order);
 
-            let new_assignments = simple_device_assignment(n, &new_probs);
-            let new_score = calculate_score(n, m, &new_probs, &new_assignments);
+        let new_assignments = simple_device_assignment(n, &new_probs);
+        let new_score = calculate_score(n, m, &new_probs, &new_assignments);
 
-            if new_score < best_score {
-                best_score = new_score;
-                best_configs = new_configs;
-                best_processor_probs = new_probs;
-                improvements += 1;
-            }
+        if new_score < best_score {
+            best_score = new_score;
+            best_configs = new_configs;
+            best_processor_probs = new_probs;
+            improvements += 1;
         }
 
         // Occasional restart for diversity
