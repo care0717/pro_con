@@ -355,12 +355,7 @@ fn find_best_systematic_button(
     } else {
         *negative_score_count = 0;
     }
-
-    eprintln!(
-        "score: {}: step: {}, negative_count: {}",
-        best_score, step, negative_score_count
-    );
-
+    eprintln!("best_score: {}", best_score);
     best_button
 }
 
@@ -380,6 +375,13 @@ fn evaluate_systematic_button(
     let mut total_movement = 0;
     let mut new_positions = Vec::new();
 
+    let mut new_cell_score = 0.0;
+    let mut adjacent_unvisited_score = 0.0;
+    let mut crowding_score = 0.0;
+    let mut overlap_score = 0.0;
+    let mut diversity_score = 0.0;
+    let mut coverage_score = 0.0;
+
     // Simulate one step and collect new positions
     for r in 0..robot_positions.len() {
         let (ci, cj) = robot_positions[r];
@@ -398,7 +400,7 @@ fn evaluate_systematic_button(
         // Count new cells
         if !visited[ni][nj] {
             new_cells += 1;
-            score += 100.0; // High reward for new cells
+            new_cell_score += 100.0; // High reward for new cells
         }
 
         // Count actual movement
@@ -415,7 +417,7 @@ fn evaluate_systematic_button(
                 adjacent_unvisited += 1;
             }
         }
-        score += adjacent_unvisited as f64 * 5.0;
+        adjacent_unvisited_score += adjacent_unvisited as f64 * 5.0;
 
         // Penalty for staying in already well-explored areas
         if visited[ni][nj] {
@@ -437,7 +439,7 @@ fn evaluate_systematic_button(
                 }
             }
             if nearby_visited > 4 {
-                score -= 10.0; // Penalty for crowded areas
+                crowding_score -= 10.0; // Penalty for crowded areas
             }
         }
     }
@@ -465,7 +467,7 @@ fn evaluate_systematic_button(
             }
         }
     }
-    score -= overlap_penalty;
+    overlap_score -= overlap_penalty;
 
     // Reward robot diversity in actions
     let mut unique_actions = std::collections::HashSet::new();
@@ -474,25 +476,25 @@ fn evaluate_systematic_button(
         unique_actions.insert(action);
     }
     if unique_actions.len() >= 3 {
-        score += 20.0; // Bonus for diverse movements
+        diversity_score += 20.0; // Bonus for diverse movements
     }
 
     // Different strategies based on coverage
     if coverage_ratio < 0.3 {
         // Early phase: reward spreading out
-        score += total_movement as f64 * 2.0;
+        coverage_score += total_movement as f64 * 2.0;
     } else if coverage_ratio < 0.7 {
         // Middle phase: balanced exploration
-        score += new_cells as f64 * 50.0;
+        coverage_score += new_cells as f64 * 50.0;
         if total_movement == 0 {
-            score -= 50.0; // Penalty for not moving
+            coverage_score -= 50.0; // Penalty for not moving
         }
     } else {
         // Late phase: focus on uncovered areas
         if new_cells > 0 {
-            score += new_cells as f64 * 500.0; // Much higher reward for new cells
+            coverage_score += new_cells as f64 * 500.0; // Much higher reward for new cells
         } else {
-            score -= 100.0; // Heavy penalty for not finding new cells
+            coverage_score -= 100.0; // Heavy penalty for not finding new cells
         }
 
         // Find all unvisited cells and calculate strategy
@@ -555,14 +557,31 @@ fn evaluate_systematic_button(
                 }
             }
 
-            score += total_improvement;
+            coverage_score += total_improvement / 2.0;
         }
     }
 
     // Add some randomness to prevent getting stuck
     let random_factor = (step * 13 + button * 17) % 100;
-    score += (random_factor as f64 - 50.0) * 0.1;
+    let random_factor_score = (random_factor as f64 - 50.0) * 0.1;
 
+    score = new_cell_score
+        + adjacent_unvisited_score
+        + crowding_score
+        + overlap_score
+        + diversity_score
+        + coverage_score
+        + random_factor_score;
+    eprintln!(
+        "new_cell_score: {} adjacent_unvisited_score: {} crowding_score: {} overlap_score: {} diversity_score: {} coverage_score: {} random_factor_score: {}",
+        new_cell_score,
+        adjacent_unvisited_score,
+        crowding_score,
+        overlap_score,
+        diversity_score,
+        coverage_score,
+        random_factor_score
+    );
     score
 }
 
