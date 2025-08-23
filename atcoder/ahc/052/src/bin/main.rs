@@ -42,8 +42,6 @@ macro_rules! read_value {
     };
 }
 
-use std::collections::{HashSet, VecDeque};
-
 const ACTIONS: [char; 5] = ['U', 'D', 'L', 'R', 'S'];
 
 fn main() {
@@ -55,8 +53,6 @@ fn main() {
         v: [chars; n],
         h: [chars; n - 1],
     }
-
-    // Find connected regions separated by walls
 
     // Create button configurations for different movement patterns
     let mut button_config = vec![vec!['S'; m]; k];
@@ -106,8 +102,43 @@ fn main() {
         }
     }
 
-    // Generate operations using greedy approach
-    let operations = generate_greedy_operations(n, m, k, &robots, &v, &h, &button_config);
+    // Run multiple attempts with time limit and choose the best result
+    let start_time = std::time::Instant::now();
+    let time_limit = std::time::Duration::from_millis(1500);
+
+    let mut best_operations = Vec::new();
+    let mut best_coverage = 0;
+    let mut best_steps = usize::MAX; // For full coverage solutions, prefer fewer steps
+    let mut attempt = 0;
+
+    while start_time.elapsed() < time_limit {
+        attempt += 1;
+
+        let (operations, visited) =
+            generate_greedy_operations(n, m, k, &robots, &v, &h, &button_config, attempt);
+        let coverage = visited.len();
+        let is_better = if coverage == n * n && best_coverage == n * n {
+            // Both achieve full coverage, prefer fewer steps
+            operations.len() < best_steps
+        } else {
+            // Prefer higher coverage
+            coverage > best_coverage
+        };
+
+        if is_better {
+            best_coverage = coverage;
+            best_operations = operations;
+            best_steps = best_operations.len();
+        }
+    }
+
+    eprintln!(
+        "Final best coverage: {}/{}, Steps: {} from {} attempts",
+        best_coverage,
+        n * n,
+        best_steps,
+        attempt
+    );
 
     // Output
     for row in &button_config {
@@ -120,7 +151,7 @@ fn main() {
         );
     }
 
-    for op in operations {
+    for op in best_operations {
         println!("{}", op);
     }
 }
@@ -159,37 +190,38 @@ fn generate_greedy_operations(
     v: &[Vec<char>],
     h: &[Vec<char>],
     button_config: &[Vec<char>],
-) -> Vec<usize> {
+    seed: usize,
+) -> (Vec<usize>, std::collections::HashSet<usize>) {
     let mut operations = Vec::new();
-    let mut visited = vec![vec![false; n]; n];
+    let mut visited = std::collections::HashSet::new();
     let mut robot_positions = robots.to_vec();
-    let mut negative_score_count = 0;
+    let mut stagnation_count = 0;
+    let mut last_coverage = 0;
 
     // Mark initial positions
     for &(i, j) in &robot_positions {
-        visited[i][j] = true;
+        visited.insert(i * n + j);
     }
 
     let max_ops = 1800;
 
     // New systematic approach: priority-based exploration with reset mechanism
-    while operations.len() < max_ops && count_visited(&visited) < n * n {
-        let current_coverage = count_visited(&visited);
+    while operations.len() < max_ops && visited.len() < n * n {
+        let current_coverage = visited.len();
         let coverage_ratio = current_coverage as f64 / (n * n) as f64;
 
-        // Check if we need to perform random reset
-        if negative_score_count >= 20 {
-            eprintln!("Negative score streak detected, performing directional reset for 20 steps");
+        // Check for stagnation (no coverage increase for 20 consecutive steps)
+        if current_coverage == last_coverage {
+            stagnation_count += 1;
+        } else {
+            stagnation_count = 0;
+            last_coverage = current_coverage;
+        }
 
+        // Check if we need to perform random reset
+        if stagnation_count >= 20 {
             // Choose a random direction: 0=right-down, 1=right-up, 2=left-down, 3=left-up
-            let direction = (operations.len() * 31 + negative_score_count * 17) % 4;
-            let direction_name = match direction {
-                0 => "right-down",
-                1 => "right-up",
-                2 => "left-down",
-                _ => "left-up",
-            };
-            eprintln!("Moving in direction: {}", direction_name);
+            let direction = (operations.len() * 31 + stagnation_count * 17 + seed * 43) % 4;
 
             // Perform directional movements for about 20 steps
             for step in 0..30 {
@@ -259,14 +291,14 @@ fn generate_greedy_operations(
                     };
 
                     new_positions[r] = (ni, nj);
-                    visited[ni][nj] = true;
+                    visited.insert(ni * n + nj);
                 }
                 robot_positions = new_positions;
             }
 
-            // Reset the negative score count
-            negative_score_count = 0;
-            eprintln!("Directional reset completed, resuming systematic exploration");
+            // Reset the stagnation count
+            stagnation_count = 0;
+            last_coverage = visited.len();
             continue;
         }
 
@@ -280,7 +312,6 @@ fn generate_greedy_operations(
             button_config,
             coverage_ratio,
             operations.len(),
-            &mut negative_score_count,
         );
 
         // Apply the button press
@@ -300,24 +331,18 @@ fn generate_greedy_operations(
             };
 
             new_positions[r] = (ni, nj);
-            visited[ni][nj] = true;
+            visited.insert(ni * n + nj);
         }
 
         robot_positions = new_positions;
     }
 
-    eprintln!(
-        "Coverage: {}/{}, Operations: {}",
-        count_visited(&visited),
-        n * n,
-        operations.len()
-    );
-    operations
+    (operations, visited)
 }
 
 fn find_best_systematic_button(
     robot_positions: &[(usize, usize)],
-    visited: &[Vec<bool>],
+    visited: &std::collections::HashSet<usize>,
     n: usize,
     k: usize,
     v: &[Vec<char>],
@@ -325,7 +350,6 @@ fn find_best_systematic_button(
     button_config: &[Vec<char>],
     coverage_ratio: f64,
     step: usize,
-    negative_score_count: &mut usize,
 ) -> usize {
     let mut best_button = 0;
     let mut best_score = -10000.0;
@@ -349,20 +373,14 @@ fn find_best_systematic_button(
         }
     }
 
-    // スコアの状態を追跡
-    if best_score < 0.0 {
-        *negative_score_count += 1;
-    } else {
-        *negative_score_count = 0;
-    }
-    eprintln!("best_score: {}", best_score);
+    // Note: stagnation tracking is now handled in main loop based on coverage changes
     best_button
 }
 
 fn evaluate_systematic_button(
     button: usize,
     robot_positions: &[(usize, usize)],
-    visited: &[Vec<bool>],
+    visited: &std::collections::HashSet<usize>,
     n: usize,
     v: &[Vec<char>],
     h: &[Vec<char>],
@@ -370,7 +388,6 @@ fn evaluate_systematic_button(
     coverage_ratio: f64,
     step: usize,
 ) -> f64 {
-    let mut score = 0.0;
     let mut new_cells = 0;
     let mut total_movement = 0;
     let mut new_positions = Vec::new();
@@ -398,7 +415,7 @@ fn evaluate_systematic_button(
         new_positions.push((ni, nj));
 
         // Count new cells
-        if !visited[ni][nj] {
+        if !visited.contains(&(ni * n + nj)) {
             new_cells += 1;
             new_cell_score += 100.0; // High reward for new cells
         }
@@ -413,14 +430,14 @@ fn evaluate_systematic_button(
         for &(di, dj) in &[(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
             let ai = (ni as i32 + di) as usize;
             let aj = (nj as i32 + dj) as usize;
-            if ai < n && aj < n && !visited[ai][aj] {
+            if ai < n && aj < n && !visited.contains(&(ai * n + aj)) {
                 adjacent_unvisited += 1;
             }
         }
-        adjacent_unvisited_score += adjacent_unvisited as f64 * 5.0;
+        adjacent_unvisited_score += adjacent_unvisited as f64;
 
         // Penalty for staying in already well-explored areas
-        if visited[ni][nj] {
+        if visited.contains(&(ni * n + nj)) {
             let mut nearby_visited = 0;
             for &(di, dj) in &[
                 (-2i32, 0i32),
@@ -434,7 +451,7 @@ fn evaluate_systematic_button(
             ] {
                 let ai = (ni as i32 + di) as usize;
                 let aj = (nj as i32 + dj) as usize;
-                if ai < n && aj < n && visited[ai][aj] {
+                if ai < n && aj < n && visited.contains(&(ai * n + aj)) {
                     nearby_visited += 1;
                 }
             }
@@ -452,7 +469,8 @@ fn evaluate_systematic_button(
             let (i2, j2) = new_positions[j];
             if (i1, j1) == (i2, j2) {
                 // Same position - heavy penalty only if both robots are not visiting new cells
-                let both_on_visited = visited[i1][j1] && visited[i2][j2];
+                let both_on_visited =
+                    visited.contains(&(i1 * n + j1)) && visited.contains(&(i2 * n + j2));
                 if both_on_visited {
                     overlap_penalty += 100.0;
                 } else {
@@ -460,7 +478,8 @@ fn evaluate_systematic_button(
                 }
             } else {
                 let dist = ((i1 as i32 - i2 as i32).abs() + (j1 as i32 - j2 as i32).abs()) as usize;
-                if dist == 1 && visited[i1][j1] && visited[i2][j2] {
+                if dist == 1 && visited.contains(&(i1 * n + j1)) && visited.contains(&(i2 * n + j2))
+                {
                     // Adjacent positions - penalty only if both on visited cells
                     overlap_penalty += 15.0;
                 }
@@ -501,7 +520,7 @@ fn evaluate_systematic_button(
         let mut unvisited_cells = Vec::new();
         for i in 0..n {
             for j in 0..n {
-                if !visited[i][j] {
+                if !visited.contains(&(i * n + j)) {
                     unvisited_cells.push((i, j));
                 }
             }
@@ -561,30 +580,22 @@ fn evaluate_systematic_button(
         }
     }
 
-    // Add some randomness to prevent getting stuck
-    let random_factor = (step * 13 + button * 17) % 100;
+    // Add some randomness to prevent getting stuck with different seeds per attempt
+    let random_factor = (step * 13 + button * 17 + (step * 7) % 101) % 100;
     let random_factor_score = (random_factor as f64 - 50.0) * 0.1;
-
-    score = new_cell_score
+    // eprintln!(
+    //     "new_cell_score: {} adjacent_unvisited_score: {} crowding_score: {} overlap_score: {} diversity_score: {} coverage_score: {} random_factor_score: {}",
+    //     new_cell_score,
+    //     adjacent_unvisited_score,
+    //     crowding_score,
+    //     overlap_score,
+    //     diversity_score, coverage_score, random_factor_score
+    // );
+    new_cell_score
         + adjacent_unvisited_score
         + crowding_score
         + overlap_score
         + diversity_score
         + coverage_score
-        + random_factor_score;
-    eprintln!(
-        "new_cell_score: {} adjacent_unvisited_score: {} crowding_score: {} overlap_score: {} diversity_score: {} coverage_score: {} random_factor_score: {}",
-        new_cell_score,
-        adjacent_unvisited_score,
-        crowding_score,
-        overlap_score,
-        diversity_score,
-        coverage_score,
-        random_factor_score
-    );
-    score
-}
-
-fn count_visited(visited: &[Vec<bool>]) -> usize {
-    visited.iter().flatten().filter(|&&v| v).count()
+        + random_factor_score
 }
