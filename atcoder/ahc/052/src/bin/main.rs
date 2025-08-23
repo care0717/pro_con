@@ -163,6 +163,7 @@ fn generate_greedy_operations(
     let mut operations = Vec::new();
     let mut visited = vec![vec![false; n]; n];
     let mut robot_positions = robots.to_vec();
+    let mut negative_score_count = 0;
 
     // Mark initial positions
     for &(i, j) in &robot_positions {
@@ -171,10 +172,103 @@ fn generate_greedy_operations(
 
     let max_ops = 1800;
 
-    // New systematic approach: priority-based exploration
+    // New systematic approach: priority-based exploration with reset mechanism
     while operations.len() < max_ops && count_visited(&visited) < n * n {
         let current_coverage = count_visited(&visited);
         let coverage_ratio = current_coverage as f64 / (n * n) as f64;
+
+        // Check if we need to perform random reset
+        if negative_score_count >= 20 {
+            eprintln!("Negative score streak detected, performing directional reset for 20 steps");
+
+            // Choose a random direction: 0=right-down, 1=right-up, 2=left-down, 3=left-up
+            let direction = (operations.len() * 31 + negative_score_count * 17) % 4;
+            let direction_name = match direction {
+                0 => "right-down",
+                1 => "right-up",
+                2 => "left-down",
+                _ => "left-up",
+            };
+            eprintln!("Moving in direction: {}", direction_name);
+
+            // Perform directional movements for about 20 steps
+            for step in 0..30 {
+                if operations.len() >= max_ops {
+                    break;
+                }
+
+                // Choose button based on direction and step
+                let target_button = match direction {
+                    0 => {
+                        if step % 2 == 0 {
+                            3
+                        } else {
+                            1
+                        }
+                    } // R, D alternating
+                    1 => {
+                        if step % 2 == 0 {
+                            3
+                        } else {
+                            0
+                        }
+                    } // R, U alternating
+                    2 => {
+                        if step % 2 == 0 {
+                            2
+                        } else {
+                            1
+                        }
+                    } // L, D alternating
+                    _ => {
+                        if step % 2 == 0 {
+                            2
+                        } else {
+                            0
+                        }
+                    } // L, U alternating
+                };
+
+                // Use the target button if it exists, otherwise use a fallback
+                let chosen_button = if target_button < k {
+                    target_button
+                } else {
+                    step % k
+                };
+                operations.push(chosen_button);
+
+                let mut new_positions = robot_positions.clone();
+                for r in 0..m {
+                    let (ci, cj) = robot_positions[r];
+                    let action = button_config[chosen_button][r];
+
+                    let (ni, nj) = match action {
+                        'U' if ci > 0 && can_move_between(ci, cj, ci - 1, cj, n, v, h) => {
+                            (ci - 1, cj)
+                        }
+                        'D' if ci < n - 1 && can_move_between(ci, cj, ci + 1, cj, n, v, h) => {
+                            (ci + 1, cj)
+                        }
+                        'L' if cj > 0 && can_move_between(ci, cj, ci, cj - 1, n, v, h) => {
+                            (ci, cj - 1)
+                        }
+                        'R' if cj < n - 1 && can_move_between(ci, cj, ci, cj + 1, n, v, h) => {
+                            (ci, cj + 1)
+                        }
+                        _ => (ci, cj),
+                    };
+
+                    new_positions[r] = (ni, nj);
+                    visited[ni][nj] = true;
+                }
+                robot_positions = new_positions;
+            }
+
+            // Reset the negative score count
+            negative_score_count = 0;
+            eprintln!("Directional reset completed, resuming systematic exploration");
+            continue;
+        }
 
         let best_button = find_best_systematic_button(
             &robot_positions,
@@ -186,6 +280,7 @@ fn generate_greedy_operations(
             button_config,
             coverage_ratio,
             operations.len(),
+            &mut negative_score_count,
         );
 
         // Apply the button press
@@ -230,6 +325,7 @@ fn find_best_systematic_button(
     button_config: &[Vec<char>],
     coverage_ratio: f64,
     step: usize,
+    negative_score_count: &mut usize,
 ) -> usize {
     let mut best_button = 0;
     let mut best_score = -10000.0;
@@ -252,7 +348,18 @@ fn find_best_systematic_button(
             best_button = button;
         }
     }
-    eprintln!("score: {}: step: {}", best_score, step);
+
+    // スコアの状態を追跡
+    if best_score < 0.0 {
+        *negative_score_count += 1;
+    } else {
+        *negative_score_count = 0;
+    }
+
+    eprintln!(
+        "score: {}: step: {}, negative_count: {}",
+        best_score, step, negative_score_count
+    );
 
     best_button
 }
