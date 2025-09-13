@@ -3,7 +3,6 @@ use std::collections::BinaryHeap;
 
 const EPS: usize = 1000000000000;
 
-// m個分lを生成し、残りは1 ~ u-lのランダムな数を生成
 fn gen_cards(n: usize, m: usize, l: usize, u: usize) -> Vec<usize> {
     let mut rng = rand::thread_rng();
     let mut cards: Vec<usize> = vec![];
@@ -19,8 +18,8 @@ fn gen_cards(n: usize, m: usize, l: usize, u: usize) -> Vec<usize> {
     for _ in 0..50 {
         cards.push(EPS);
     }
-    for _ in 0..50 {
-        cards.push(rng.gen_range(EPS / 3..3 * EPS / 4));
+    for _ in 0..40 {
+        cards.push(rng.gen_range(EPS / 3..EPS));
     }
     for _ in 0..200 {
         cards.push(rng.gen_range(EPS / 500..EPS / 10));
@@ -28,11 +27,8 @@ fn gen_cards(n: usize, m: usize, l: usize, u: usize) -> Vec<usize> {
     for _ in 0..100 {
         cards.push(rng.gen_range(EPS / 50000..EPS / 1000));
     }
-    for _ in 0..50 {
-        cards.push(rng.gen_range(EPS / 50000..EPS / 10000));
-    }
     while cards.len() < n {
-        cards.push(rng.gen_range(EPS / 500000..EPS / 100000));
+        cards.push(rng.gen_range(EPS / 500000..EPS / 10000));
     }
     cards.sort_by(|a, b| b.cmp(a));
     cards
