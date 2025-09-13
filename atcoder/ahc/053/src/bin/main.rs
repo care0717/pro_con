@@ -1,4 +1,5 @@
 use rand::Rng;
+use std::collections::BinaryHeap;
 
 const EPS: usize = 1000000000000;
 
@@ -6,13 +7,34 @@ const EPS: usize = 1000000000000;
 fn gen_cards(n: usize, m: usize, l: usize, u: usize) -> Vec<usize> {
     let mut rng = rand::thread_rng();
     let mut cards: Vec<usize> = vec![];
-    for _ in 0..m {
-        cards.push(rng.gen_range(l..=u) - EPS / 5);
+    for _ in 0..m / 3 {
+        cards.push(l);
     }
-    cards.sort();
+    for _ in m / 3..m * 2 / 3 {
+        cards.push(l + EPS);
+    }
+    for _ in m * 2 / 3..m {
+        cards.push(l + EPS * 2);
+    }
+    for _ in 0..35 {
+        cards.push(EPS);
+    }
+    for _ in 0..50 {
+        cards.push(rng.gen_range(EPS / 3..3 * EPS / 4));
+    }
+    for _ in 0..130 {
+        cards.push(rng.gen_range(EPS / 50..EPS / 10));
+    }
+    for _ in 0..100 {
+        cards.push(rng.gen_range(EPS / 500..EPS / 100));
+    }
+    for _ in 0..100 {
+        cards.push(rng.gen_range(EPS / 5000..EPS / 1000));
+    }
     while cards.len() < n {
-        cards.push(rng.gen_range(1..EPS / 17));
+        cards.push(rng.gen_range(EPS / 50000..EPS / 10000));
     }
+    cards.sort_by(|a, b| b.cmp(a));
     cards
 }
 
@@ -33,22 +55,33 @@ fn compute_diff(b: &Vec<usize>, cards: &Vec<usize>, placement: &Vec<usize>) -> u
     diff
 }
 
-fn gen_random_placement(n: usize, m: usize) -> Vec<usize> {
-    let mut rng = rand::thread_rng();
-    let mut placement: Vec<usize> = vec![];
+// 現在のsumとbの差が一番大きいindexを常にpriority queueで管理し、sumがbに近づくようにplacementを更新
+fn gen_gready_placement(b: &Vec<usize>, cards: &Vec<usize>) -> Vec<usize> {
+    let m = b.len();
+    let mut tmp_cards = cards.clone();
+    let mut sum: Vec<usize> = vec![0; m];
+    let mut priority_queue = BinaryHeap::new();
     for i in 0..m {
-        placement.push(i + 1);
+        priority_queue.push((sum[i].abs_diff(b[i]), i));
     }
-    while placement.len() < n {
-        placement.push(rng.gen_range(1..m + 1));
+    let mut placement: Vec<usize> = vec![];
+    while tmp_cards.len() > 0 {
+        let (diff, i) = priority_queue.pop().unwrap();
+        if sum[i] + tmp_cards[0] < b[i] {
+            sum[i] += tmp_cards[0];
+            placement.push(i + 1);
+            priority_queue.push((sum[i].abs_diff(b[i]), i));
+        } else {
+            priority_queue.push((diff, i));
+            placement.push(0);
+        }
+        tmp_cards.remove(0);
     }
-
     placement
 }
 
 fn main() {
     use std::io::{self, Write};
-    let start_time: std::time::Instant = std::time::Instant::now();
 
     let stdin = io::stdin();
     let mut line = String::new();
@@ -79,35 +112,11 @@ fn main() {
         .map(|x| x.parse().unwrap())
         .collect();
 
-    let placement = gen_random_placement(n, m);
-
-    // 1.8sec以内で、diffを最小化するplacementを生成
-    // placementのm~n-1までをランダムに選び、半分の確率で0、もう半分の確率で1~mのランダムな数を生成
-    // これをdiffが小さくなったら採択する焼きなましをする
-    let mut best_placement = placement;
-    let mut best_diff = compute_diff(&b, &cards, &best_placement);
-    let time_limit = std::time::Duration::from_millis(1800);
-    let mut rng = rand::thread_rng();
-    while start_time.elapsed() < time_limit {
-        let mut new_placement = best_placement.clone();
-        let i = rng.gen_range(m..n);
-        let mut temperature = 1.0 - start_time.elapsed().as_secs_f64() / time_limit.as_secs_f64();
-        if temperature < 0.0 {
-            temperature = 0.0;
-        }
-
-        new_placement[i] = rng.gen_range(0..m + 1);
-
-        let new_diff = compute_diff(&b, &cards, &new_placement);
-        if new_diff < best_diff || rng.gen_bool(temperature) {
-            best_diff = new_diff;
-            best_placement = new_placement;
-        }
-    }
+    let placement = gen_gready_placement(&b, &cards);
 
     println!(
         "{}",
-        best_placement
+        placement
             .iter()
             .map(|x| x.to_string())
             .collect::<Vec<String>>()
