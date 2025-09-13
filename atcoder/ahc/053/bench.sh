@@ -5,6 +5,10 @@
 total_score=0
 test_count=0
 failed_count=0
+min_score=999999999999999999
+max_score=0
+min_case=""
+max_case=""
 
 echo "Starting benchmark for AHC052..."
 echo "Building binaries..."
@@ -43,6 +47,17 @@ for i in $(seq -f "%04g" 0 99); do
         if [ -n "$score" ]; then
             total_score=$((total_score + score))
             test_count=$((test_count + 1))
+            
+            # Update min and max scores
+            if [ "$score" -lt "$min_score" ]; then
+                min_score=$score
+                min_case=$i
+            fi
+            if [ "$score" -gt "$max_score" ]; then
+                max_score=$score
+                max_case=$i
+            fi
+            
             echo "Score: $score"
         else
             echo "Failed to parse score"
@@ -58,6 +73,12 @@ for i in $(seq -f "%04g" 0 99); do
 done
 
 echo "=== BENCHMARK RESULTS ==="
-average_score=$((total_score / test_count))
-echo "Average score: $average_score"
+if [ $test_count -gt 0 ]; then
+    average_score=$((total_score / test_count))
+    echo "Average score: $average_score"
+    echo "Minimum score: $min_score (case: $min_case)"
+    echo "Maximum score: $max_score (case: $max_case)"
+else
+    echo "No successful tests completed"
+fi
 

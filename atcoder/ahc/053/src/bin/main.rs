@@ -7,32 +7,32 @@ const EPS: usize = 1000000000000;
 fn gen_cards(n: usize, m: usize, l: usize, u: usize) -> Vec<usize> {
     let mut rng = rand::thread_rng();
     let mut cards: Vec<usize> = vec![];
-    for _ in 0..m / 3 {
+    for _ in 0..20 {
         cards.push(l);
     }
-    for _ in m / 3..m * 2 / 3 {
+    for _ in 20..40 {
         cards.push(l + EPS);
     }
-    for _ in m * 2 / 3..m {
+    for _ in 40..m {
         cards.push(l + EPS * 2);
     }
-    for _ in 0..35 {
+    for _ in 0..50 {
         cards.push(EPS);
     }
     for _ in 0..50 {
         cards.push(rng.gen_range(EPS / 3..3 * EPS / 4));
     }
-    for _ in 0..130 {
-        cards.push(rng.gen_range(EPS / 50..EPS / 10));
+    for _ in 0..200 {
+        cards.push(rng.gen_range(EPS / 500..EPS / 10));
     }
     for _ in 0..100 {
-        cards.push(rng.gen_range(EPS / 500..EPS / 100));
+        cards.push(rng.gen_range(EPS / 50000..EPS / 1000));
     }
-    for _ in 0..100 {
-        cards.push(rng.gen_range(EPS / 5000..EPS / 1000));
+    for _ in 0..50 {
+        cards.push(rng.gen_range(EPS / 50000..EPS / 10000));
     }
     while cards.len() < n {
-        cards.push(rng.gen_range(EPS / 50000..EPS / 10000));
+        cards.push(rng.gen_range(EPS / 500000..EPS / 100000));
     }
     cards.sort_by(|a, b| b.cmp(a));
     cards
