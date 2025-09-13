@@ -20,7 +20,7 @@ fi
 echo "Testing cases 0000-0099..."
 echo ""
 
-for i in $(seq -f "%04g" 0 30); do
+for i in $(seq -f "%04g" 0 99); do
     input_file="in/${i}.txt"
     output_file="out_${i}.txt"
     
