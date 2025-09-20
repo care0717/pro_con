@@ -71,7 +71,7 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         .empty { background-color: #90EE90; color: #333; }
         .tree { background-color: #8B4513; color: white; }
         .flower { background-color: #FF69B4; color: white; }
-        .adventurer { background-color: #FFD700; color: black; }
+        .adventurer { background-color: #FF0000; color: black; font-weight: bold; font-size: 14px; }
         .confirmed { background-color: #E6E6FA; }
         .target { border: 3px solid #FF0000 !important; box-sizing: border-box; }
         .info { margin-top: 20px; padding: 10px; background-color: #f0f0f0; }
@@ -90,6 +90,11 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         <button onclick="pauseAnimation()">Pause</button>
         <span id="stepInfo">Step: 0 / 0</span>
     </div>
+    <div class="controls">
+        <label for="stepSlider">Step: </label>
+        <input type="range" id="stepSlider" min="0" max="0" value="0" style="width: 300px;">
+        <span id="stepSliderValue">0</span>
+    </div>
     "#,
     );
 
@@ -100,11 +105,11 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
     html.push_str(
         r#"
     <div class="info" id="info">
-        <div>Adventurer Position: <span id="adventurerPos">(0, 0)</span></div>
-        <div>Target: <span id="targetPos">None</span></div>
-        <div>Confirmed Cells: <span id="confirmedCount">0</span></div>
-        <div>Steps Taken: <span id="stepsTaken">0</span></div>
-        <div>Treants Placed: <span id="treantCount">0</span></div>
+        <div><strong>★ Adventurer Position:</strong> <span id="adventurerPos" style="color: #FF0000; font-weight: bold;">(0, 0)</span></div>
+        <div><strong>🎯 Target:</strong> <span id="targetPos">None</span></div>
+        <div><strong>📋 Confirmed Cells:</strong> <span id="confirmedCount">0</span></div>
+        <div><strong>👣 Steps Taken:</strong> <span id="stepsTaken">0</span></div>
+        <div><strong>🌳 Treants Placed:</strong> <span id="treantCount">0</span></div>
     </div>
     "#,
     );
@@ -124,6 +129,9 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         }};
         
         const simulationSteps = {};
+        
+        console.log('simulationSteps:', simulationSteps);
+        console.log('simulationSteps.length:', simulationSteps.length);
         
         let currentStep = 0;
         let animationInterval = null;
@@ -158,7 +166,18 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         }}
         
         function updateStep(step) {{
-            if (step < 0 || step >= simulationSteps.length) return;
+            console.log('updateStep called with step:', step);
+            console.log('simulationSteps.length:', simulationSteps.length);
+            
+            if (!simulationSteps || simulationSteps.length === 0) {{
+                console.error('simulationSteps is empty or undefined');
+                return;
+            }}
+            
+            if (step < 0 || step >= simulationSteps.length) {{
+                console.log('step out of range:', step, 'length:', simulationSteps.length);
+                return;
+            }}
             
             currentStep = step;
             
@@ -167,42 +186,95 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
                 for (let j = 0; j < input.N; j++) {{
                     const cell = document.getElementById(`cell-${{i}}-${{j}}`);
                     cell.className = cell.className.replace(/ adventurer| confirmed| target| treant/g, '');
+                    // Reset text content to original state
+                    if (input.b[i][j] === 'T') {{
+                        cell.textContent = 'T';
+                    }} else if (i === input.t[0] && j === input.t[1]) {{
+                        cell.textContent = 'F';
+                    }} else {{
+                        cell.textContent = '.';
+                    }}
                 }}
             }}
             
             const stepData = simulationSteps[step];
             
-            // Mark adventurer position
-            const adventurerCell = document.getElementById(`cell-${{stepData.adventurerPos[0]}}-${{stepData.adventurerPos[1]}}`);
-            adventurerCell.className += ' adventurer';
-            adventurerCell.textContent = 'A';
-            
-            // Mark confirmed cells
-            stepData.confirmed.forEach(pos => {{
-                const cell = document.getElementById(`cell-${{pos[0]}}-${{pos[1]}}`);
-                cell.className += ' confirmed';
-            }});
-            
-            // Mark target
-            if (stepData.target && stepData.target[0] !== undefined && stepData.target[1] !== undefined) {{
-                const targetCell = document.getElementById(`cell-${{stepData.target[0]}}-${{stepData.target[1]}}`);
-                targetCell.className += ' target';
+            if (!stepData) {{
+                return;
             }}
             
-            // Mark treants
-            stepData.treants.forEach(pos => {{
-                const cell = document.getElementById(`cell-${{pos[0]}}-${{pos[1]}}`);
-                cell.className += ' treant';
-                cell.textContent = 'T';
-            }});
+            // Mark adventurer position
+            if (stepData.adventurerPos && stepData.adventurerPos.length >= 2) {{
+                const adventurerCell = document.getElementById(`cell-${{stepData.adventurerPos[0]}}-${{stepData.adventurerPos[1]}}`);
+                if (adventurerCell) {{
+                    adventurerCell.className += ' adventurer';
+                    adventurerCell.textContent = '★';
+                    adventurerCell.title = `Adventurer at (${{stepData.adventurerPos[0]}}, ${{stepData.adventurerPos[1]}})`;
+                }}
+            }}
+            
+            // Mark confirmed cells (but not original trees)
+            if (stepData.confirmed && Array.isArray(stepData.confirmed)) {{
+                stepData.confirmed.forEach(pos => {{
+                    if (pos && pos.length >= 2) {{
+                        const cell = document.getElementById(`cell-${{pos[0]}}-${{pos[1]}}`);
+                        if (cell && !cell.className.includes('adventurer') && !cell.className.includes('tree')) {{
+                            cell.className += ' confirmed';
+                        }}
+                    }}
+                }});
+            }}
+            
+            // Mark target
+            if (stepData.target && Array.isArray(stepData.target) && stepData.target.length >= 2 && stepData.target[0] !== undefined && stepData.target[1] !== undefined) {{
+                const targetCell = document.getElementById(`cell-${{stepData.target[0]}}-${{stepData.target[1]}}`);
+                if (targetCell && !targetCell.className.includes('adventurer')) {{
+                    targetCell.className += ' target';
+                }}
+            }}
+            
+            // Mark treants (only if not adventurer position)
+            if (stepData.treants && Array.isArray(stepData.treants)) {{
+                stepData.treants.forEach(pos => {{
+                    if (pos && pos.length >= 2) {{
+                        const cell = document.getElementById(`cell-${{pos[0]}}-${{pos[1]}}`);
+                        if (cell && !cell.className.includes('adventurer')) {{
+                            cell.className += ' treant';
+                            cell.textContent = 'T';
+                        }}
+                    }}
+                }});
+            }}
             
             // Update info panel
             document.getElementById('stepInfo').textContent = `Step: ${{step + 1}} / ${{simulationSteps.length}}`;
-            document.getElementById('adventurerPos').textContent = `(${{stepData.adventurerPos[0]}}, ${{stepData.adventurerPos[1]}})`;
-            document.getElementById('targetPos').textContent = stepData.target ? `(${{stepData.target[0]}}, ${{stepData.target[1]}})` : 'None';
-            document.getElementById('confirmedCount').textContent = stepData.confirmed.length;
+            
+            // Update slider
+            const slider = document.getElementById('stepSlider');
+            const sliderValue = document.getElementById('stepSliderValue');
+            if (slider && sliderValue) {{
+                slider.value = step;
+                sliderValue.textContent = step;
+            }}
+            
+            if (stepData.adventurerPos && stepData.adventurerPos.length >= 2) {{
+                const adventurerPosElement = document.getElementById('adventurerPos');
+                adventurerPosElement.textContent = `(${{stepData.adventurerPos[0]}}, ${{stepData.adventurerPos[1]}})`;
+                adventurerPosElement.style.color = '#FF0000';
+                adventurerPosElement.style.fontWeight = 'bold';
+            }} else {{
+                document.getElementById('adventurerPos').textContent = 'Unknown';
+            }}
+            
+            if (stepData.target && Array.isArray(stepData.target) && stepData.target.length >= 2) {{
+                document.getElementById('targetPos').textContent = `(${{stepData.target[0]}}, ${{stepData.target[1]}})`;
+            }} else {{
+                document.getElementById('targetPos').textContent = 'None';
+            }}
+            
+            document.getElementById('confirmedCount').textContent = stepData.confirmed ? stepData.confirmed.length : 0;
             document.getElementById('stepsTaken').textContent = step;
-            document.getElementById('treantCount').textContent = stepData.treants.length;
+            document.getElementById('treantCount').textContent = stepData.treants ? stepData.treants.length : 0;
         }}
         
         function nextStep() {{
@@ -235,9 +307,32 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
             }}
         }}
         
+        // Initialize slider
+        function initSlider() {{
+            const slider = document.getElementById('stepSlider');
+            const sliderValue = document.getElementById('stepSliderValue');
+            
+            if (simulationSteps && simulationSteps.length > 0) {{
+                slider.max = simulationSteps.length - 1;
+                slider.value = 0;
+                sliderValue.textContent = '0';
+                
+                slider.addEventListener('input', function() {{
+                    const step = parseInt(this.value);
+                    updateStep(step);
+                    sliderValue.textContent = step;
+                }});
+            }}
+        }}
+        
         // Initialize
         initGrid();
-        updateStep(0);
+        initSlider();
+        if (simulationSteps && simulationSteps.length > 0) {{
+            updateStep(0);
+        }} else {{
+            document.getElementById('stepInfo').textContent = 'No steps available';
+        }}
     </script>
     "#, input.N, input.t.0, input.t.1, input_b_json, simulation_steps_json));
 
@@ -246,6 +341,7 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
 
 #[derive(serde::Serialize, Debug)]
 struct SimulationStep {
+    #[serde(rename = "adventurerPos")]
     adventurer_pos: (usize, usize),
     confirmed: Vec<(usize, usize)>,
     target: Option<(usize, usize)>,
@@ -264,82 +360,55 @@ fn generate_simulation_steps(input: &Input, out: &Output) -> Vec<SimulationStep>
         treants: Vec::new(),
     });
 
-    // Only simulate if there are treant placements
-    if !out.out.is_empty() {
-        // Get all treants from the first turn (only turn with placements)
-        let first_turn_treants = &out.out[0];
-        let mut treants = HashSet::new();
-        for &(i, j) in first_turn_treants {
-            treants.insert((i, j));
+    // Simulate the actual game using the Sim struct
+    let mut sim = Sim::new(input);
+    let mut treants = HashSet::new();
+
+    // Process each turn
+    for (turn_idx, turn_treants) in out.out.iter().enumerate() {
+        // Filter out treants that are already revealed (they can't be placed)
+        let mut valid_treants = Vec::new();
+        for &(i, j) in turn_treants {
+            if !sim.revealed[i * sim.N + j] {
+                valid_treants.push((i, j));
+                treants.insert((i, j));
+            }
         }
 
-        // Show the state after treant placement
-        steps.push(SimulationStep {
-            adventurer_pos: entrance,
-            confirmed: vec![entrance],
-            target: None,
-            treants: treants.iter().cloned().collect(),
-        });
+        // Execute the turn with only valid treants
+        match sim.step(&valid_treants) {
+            Ok(_) => {
+                // Get current state
+                let mut confirmed = HashSet::new();
+                for i in 0..input.N {
+                    for j in 0..input.N {
+                        if sim.revealed[i * input.N + j] {
+                            confirmed.insert((i, j));
+                        }
+                    }
+                }
 
-        // For demonstration, show a few more steps with the adventurer moving
-        // This is a simplified simulation since we don't have the full game state
-        let mut current_pos = entrance;
-        let mut confirmed = HashSet::new();
-        confirmed.insert(entrance);
+                let step = SimulationStep {
+                    adventurer_pos: sim.p,
+                    confirmed: confirmed.iter().cloned().collect(),
+                    target: Some(sim.target),
+                    treants: treants.iter().cloned().collect(),
+                };
+                steps.push(step);
 
-        // Simple pathfinding towards the flower
-        let flower_pos = input.t;
-        for _step in 1..=10 {
-            // Simple movement towards flower
-            let (ci, cj) = current_pos;
-            let (fi, fj) = flower_pos;
-
-            let mut next_pos = current_pos;
-            if ci < fi
-                && ci + 1 < input.N
-                && !treants.contains(&(ci + 1, cj))
-                && input.b[ci + 1][cj] != 'T'
-            {
-                next_pos = (ci + 1, cj);
-            } else if ci > fi
-                && ci > 0
-                && !treants.contains(&(ci - 1, cj))
-                && input.b[ci - 1][cj] != 'T'
-            {
-                next_pos = (ci - 1, cj);
-            } else if cj < fj
-                && cj + 1 < input.N
-                && !treants.contains(&(ci, cj + 1))
-                && input.b[ci][cj + 1] != 'T'
-            {
-                next_pos = (ci, cj + 1);
-            } else if cj > fj
-                && cj > 0
-                && !treants.contains(&(ci, cj - 1))
-                && input.b[ci][cj - 1] != 'T'
-            {
-                next_pos = (ci, cj - 1);
+                // Check if game ended
+                if sim.p == sim.t {
+                    break;
+                }
             }
-
-            if next_pos == current_pos {
-                break; // Can't move further
-            }
-
-            current_pos = next_pos;
-            confirmed.insert(current_pos);
-
-            steps.push(SimulationStep {
-                adventurer_pos: current_pos,
-                confirmed: confirmed.iter().cloned().collect(),
-                target: Some(flower_pos),
-                treants: treants.iter().cloned().collect(),
-            });
-
-            if current_pos == flower_pos {
-                break; // Reached the flower
+            Err(e) => {
+                eprintln!("Step {} failed: {}", turn_idx, e);
+                break;
             }
         }
     }
+
+    eprintln!("Generated {} steps", steps.len());
 
     steps
 }

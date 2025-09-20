@@ -1221,6 +1221,7 @@ dependencies = [
  "recur-fn",
  "regex",
  "rustc-hash",
+ "serde",
  "serde_json",
  "smallvec",
  "static_assertions",
