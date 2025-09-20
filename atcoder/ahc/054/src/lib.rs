@@ -44,10 +44,10 @@ const DIJ: [(usize, usize); 4] = [(!0, 0), (1, 0), (0, !0), (0, 1)];
 
 #[derive(Clone, Debug)]
 pub struct Input {
-    N: usize,
-    t: (usize, usize),
-    b: Vec<Vec<char>>,
-    q: Vec<(usize, usize)>,
+    pub N: usize,
+    pub t: (usize, usize),
+    pub b: Vec<Vec<char>>,
+    pub q: Vec<(usize, usize)>,
 }
 
 impl std::fmt::Display for Input {
