@@ -27,8 +27,8 @@ fn exist_around_tree(bss: &Vec<Vec<char>>, ti: usize, tj: usize) -> bool {
     for (di, dj) in DIJ {
         let ni = ti + di;
         let nj = tj + dj;
-        if ni >= 0 && nj >= 0 && ni < bss.len() && nj < bss[0].len() {
-            if bss[ni as usize][nj as usize] == 'T' {
+        if ni < bss.len() && nj < bss[0].len() {
+            if bss[ni][nj] == 'T' {
                 return true;
             }
         }
@@ -81,12 +81,10 @@ fn can_reach_flower(bss: &Vec<Vec<char>>, start_ti: usize, start_tj: usize) -> (
         for (di, dj) in DIJ {
             let ni = i + di;
             let nj = j + dj;
-            if ni >= 0 && nj >= 0 && ni < bss.len() && nj < bss[0].len() {
-                if bss[ni as usize][nj as usize] != 'T'
-                    && !visited.contains(&(ni as usize, nj as usize))
-                {
-                    visited.insert((ni as usize, nj as usize));
-                    queue.push((ni as usize, nj as usize, steps + 1));
+            if ni < bss.len() && nj < bss[0].len() {
+                if bss[ni][nj] != 'T' && !visited.contains(&(ni, nj)) {
+                    visited.insert((ni, nj));
+                    queue.push((ni, nj, steps + 1));
                 }
             }
         }
@@ -94,14 +92,64 @@ fn can_reach_flower(bss: &Vec<Vec<char>>, start_ti: usize, start_tj: usize) -> (
     (false, 0)
 }
 
+fn surround_flower(
+    bss: &mut Vec<Vec<char>>,
+    confirmed: &HashSet<(usize, usize)>,
+    t: (usize, usize),
+) -> Vec<(usize, usize)> {
+    const SURROUND_FLOWER: [[(i64, i64); 5]; 8] = [
+        [(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)],
+        [(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],
+        [(0, -1), (-1, 0), (0, 1), (1, 1), (2, 0)],
+        [(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)],
+        [(-1, 0), (0, 1), (1, 0), (1, -1), (0, -2)],
+        [(-1, 0), (0, 1), (1, 0), (-1, -1), (0, -2)],
+        [(0, 1), (1, 0), (0, -1), (-1, -1), (-2, 0)],
+        [(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)],
+    ];
+    let n = bss.len();
+    let mut best_bss = bss.clone();
+    let mut best_treant_placements = Vec::new();
+    let mut best_length = 0;
+    for candidate in SURROUND_FLOWER {
+        let mut treant_placements = Vec::new();
+        let mut tmp_bss = bss.clone();
+        for (di, dj) in candidate {
+            let ni = t.0 as i64 + di;
+            let nj = t.1 as i64 + dj;
+            if ni < 0 || nj < 0 {
+                continue;
+            }
+            let ni = ni as usize;
+            let nj = nj as usize;
+            if ni < n && nj < n {
+                if tmp_bss[ni][nj] == '.' && !confirmed.contains(&(ni, nj)) {
+                    tmp_bss[ni][nj] = 'T';
+                    treant_placements.push((ni, nj));
+                }
+            }
+        }
+        let (can_reach, length) = can_reach_flower(&tmp_bss, 0, n / 2);
+        if can_reach && length > best_length {
+            best_length = length;
+            best_treant_placements = treant_placements;
+            best_bss = tmp_bss;
+        }
+    }
+    *bss = best_bss;
+    return best_treant_placements;
+}
+
 fn init_tree(
     bss: &mut Vec<Vec<char>>,
     confirmed: &HashSet<(usize, usize)>,
     start_pos: usize,
     direction: i64,
+    t: (usize, usize),
 ) -> Vec<(usize, usize)> {
     let n = bss.len();
     let mut treant_placements = Vec::new();
+    treant_placements.extend(surround_flower(bss, &confirmed, t));
     // 3つ飛ばしで斜めに線を引く
     for i in (0..n).step_by(3) {
         treant_placements.extend(put_diagonal(bss, &confirmed, 0, i + start_pos, direction));
@@ -115,10 +163,11 @@ fn init_tree(
             direction,
         ));
     }
+
     treant_placements
 }
 pub struct Sim {
-    pub N: usize,
+    pub n: usize,
     pub b: Vec<char>,
     pub p: (usize, usize),
     pub t: (usize, usize),
@@ -134,7 +183,7 @@ impl Sim {
         let mut revealed = vec![false; n * n];
         revealed[n / 2] = true;
         Self {
-            N: n,
+            n: n,
             b: bss.iter().flatten().copied().collect(),
             p: (0, n / 2),
             t: t,
@@ -157,19 +206,19 @@ impl Sim {
         dist.fill(i32::MAX);
         let mut que = vec![target];
         let mut qs = 0;
-        dist[target.0 * self.N + target.1] = 0;
+        dist[target.0 * self.n + target.1] = 0;
         while qs < que.len() {
             let (i, j) = que[qs];
             qs += 1;
             for (di, dj) in DIJ {
                 let i2 = i + di;
                 let j2 = j + dj;
-                if i2 < self.N
-                    && j2 < self.N
-                    && dist[i2 * self.N + j2] == i32::MAX
-                    && (!self.revealed[i2 * self.N + j2] || self.b[i2 * self.N + j2] == '.')
+                if i2 < self.n
+                    && j2 < self.n
+                    && dist[i2 * self.n + j2] == i32::MAX
+                    && (!self.revealed[i2 * self.n + j2] || self.b[i2 * self.n + j2] == '.')
                 {
-                    dist[i2 * self.N + j2] = dist[i * self.N + j] + 1;
+                    dist[i2 * self.n + j2] = dist[i * self.n + j] + 1;
                     que.push((i2, j2));
                 }
             }
@@ -181,27 +230,27 @@ impl Sim {
             return Err("Too many outputs".to_owned());
         }
         for &(i, j) in xy {
-            if self.revealed[i * self.N + j] {
+            if self.revealed[i * self.n + j] {
                 return Err(format!("({}, {}) is already revealed", i, j));
-            } else if self.b[i * self.N + j] != '.' {
+            } else if self.b[i * self.n + j] != '.' {
                 return Err(format!("({}, {}) is not empty", i, j));
             } else if (i, j) == self.t {
                 return Err(format!("({}, {}) contains the flower", i, j));
             }
-            self.b[i * self.N + j] = 't';
+            self.b[i * self.n + j] = 't';
         }
         let mut changed = false;
         for (di, dj) in DIJ {
             let mut i2 = self.p.0;
             let mut j2 = self.p.1;
-            while i2 < self.N && j2 < self.N {
-                if self.revealed[i2 * self.N + j2].setmax(true) {
+            while i2 < self.n && j2 < self.n {
+                if self.revealed[i2 * self.n + j2].setmax(true) {
                     self.new_revealed.push((i2, j2));
-                    if self.b[i2 * self.N + j2] != '.' {
+                    if self.b[i2 * self.n + j2] != '.' {
                         changed = true;
                     }
                 }
-                if self.b[i2 * self.N + j2] != '.' {
+                if self.b[i2 * self.n + j2] != '.' {
                     break;
                 }
                 i2 += di;
@@ -213,20 +262,20 @@ impl Sim {
             self.target = (!0, !0);
             self.change_target(target);
         }
-        if self.revealed[self.t.0 * self.N + self.t.1] {
+        if self.revealed[self.t.0 * self.n + self.t.1] {
             self.change_target(self.t);
         }
-        if self.target != (!0, !0) && self.dist[self.p.0 * self.N + self.p.1] == i32::MAX {
+        if self.target != (!0, !0) && self.dist[self.p.0 * self.n + self.p.1] == i32::MAX {
             self.target = (!0, !0);
         }
         if self.target == (!0, !0)
-            || self.target != self.t && self.revealed[self.target.0 * self.N + self.target.1]
+            || self.target != self.t && self.revealed[self.target.0 * self.n + self.target.1]
         {
             self.change_target(self.p);
             loop {
                 if let Some(target) = self.q.pop() {
-                    if !self.revealed[target.0 * self.N + target.1]
-                        && self.dist[target.0 * self.N + target.1] != i32::MAX
+                    if !self.revealed[target.0 * self.n + target.1]
+                        && self.dist[target.0 * self.n + target.1] != i32::MAX
                     {
                         self.change_target(target);
                         break;
@@ -241,7 +290,7 @@ impl Sim {
         for dir in 0..4 {
             let i2 = self.p.0 + DIJ[dir].0;
             let j2 = self.p.1 + DIJ[dir].1;
-            if i2 < self.N && j2 < self.N && min.setmin(self.dist[i2 * self.N + j2]) {
+            if i2 < self.n && j2 < self.n && min.setmin(self.dist[i2 * self.n + j2]) {
                 next_dir = dir;
             }
         }
@@ -249,35 +298,6 @@ impl Sim {
         self.p.0 += DIJ[next_dir].0;
         self.p.1 += DIJ[next_dir].1;
         Ok(())
-    }
-
-    fn find_reachable_unrevealed(&self) -> Vec<(usize, usize)> {
-        let mut reachable = Vec::new();
-        let mut queue = Vec::new();
-        queue.push(self.p);
-        let mut visited = vec![false; self.N * self.N];
-        visited[self.p.0 * self.N + self.p.1] = true;
-
-        while !queue.is_empty() {
-            let (i, j) = queue.pop().unwrap();
-            for (di, dj) in DIJ {
-                let i2 = i + di;
-                let j2 = j + dj;
-                if i2 < self.N && j2 < self.N && !visited[i2 * self.N + j2] {
-                    visited[i2 * self.N + j2] = true;
-                    // In tentative map, unrevealed cells are treated as empty
-                    let is_blocked =
-                        self.revealed[i2 * self.N + j2] && self.b[i2 * self.N + j2] == 'T';
-                    if !is_blocked {
-                        if !self.revealed[i2 * self.N + j2] {
-                            reachable.push((i2, j2));
-                        }
-                        queue.push((i2, j2));
-                    }
-                }
-            }
-        }
-        reachable
     }
 }
 
@@ -332,18 +352,15 @@ fn main() {
 
     let mut turn = 0;
     loop {
-        // Read adventurer position
         let line = lines.next().unwrap().unwrap();
         let mut parts = line.trim().split_whitespace();
         let pi: usize = parts.next().unwrap().parse().unwrap();
         let pj: usize = parts.next().unwrap().parse().unwrap();
 
-        // Read number of confirmed cells and confirmed cells coordinates
         let line = lines.next().unwrap().unwrap();
         let mut parts = line.trim().split_whitespace();
         let num_confirmed: usize = parts.next().unwrap().parse().unwrap();
 
-        // Read confirmed cells coordinates
         let mut confirmed = HashSet::new();
         for _ in 0..num_confirmed {
             let x: usize = parts.next().unwrap().parse().unwrap();
@@ -400,7 +417,7 @@ fn solve(
     let mut best_bss: Vec<Vec<char>> = bss.clone();
     for i in 0..3 {
         let mut tmp_bss: Vec<Vec<char>> = bss.clone();
-        let treant_placements = init_tree(&mut tmp_bss, &confirmed, i, 1);
+        let treant_placements = init_tree(&mut tmp_bss, &confirmed, i, 1, (ti, tj));
         let steps = simulate(&tmp_bss, pi, pj, (ti, tj), q.clone());
 
         if steps > max_steps {
@@ -413,8 +430,8 @@ fn solve(
     let mut current_placements = best_placements.clone();
     let mut current_bss = best_bss.clone();
     let mut current_score = max_steps;
-
-    while start_time.elapsed() < std::time::Duration::from_millis(1800) {
+    let mut iteration = 0;
+    while start_time.elapsed() < std::time::Duration::from_millis(1900) {
         let mut new_bss = current_bss.clone();
         let mut new_placements = current_placements.clone();
 
@@ -476,7 +493,7 @@ fn solve(
         let new_score = simulate(&new_bss, pi, pj, (ti, tj), q.clone());
 
         // 焼きなましの受理判定
-        let temperature = 1000.0 * (1.0 - start_time.elapsed().as_millis() as f64 / 1800.0);
+        let _temperature = 1000.0 * (1.0 - start_time.elapsed().as_millis() as f64 / 1800.0);
         let delta = new_score as f64 - current_score as f64;
         let accept = delta > 0.0;
 
@@ -484,13 +501,9 @@ fn solve(
             current_placements = new_placements;
             current_bss = new_bss;
             current_score = new_score;
-
-            if new_score > max_steps {
-                max_steps = new_score;
-                best_placements = current_placements.clone();
-                best_bss = current_bss.clone();
-            }
         }
+        iteration += 1;
     }
-    best_placements
+    eprintln!("iteration: {}", iteration);
+    current_placements
 }
