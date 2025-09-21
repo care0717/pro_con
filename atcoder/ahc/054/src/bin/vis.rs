@@ -75,7 +75,7 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         .confirmed { background-color: #E6E6FA; }
         .target { border: 3px solid #FF0000 !important; box-sizing: border-box; }
         .info { margin-top: 20px; padding: 10px; background-color: #f0f0f0; }
-        .treant { background-color: #228B22; color: white; }
+        .treant { background-color: #228B22; color: white; cursor: pointer; }
     </style>
     "#,
     );
@@ -110,6 +110,8 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         <div><strong>📋 Confirmed Cells:</strong> <span id="confirmedCount">0</span></div>
         <div><strong>👣 Steps Taken:</strong> <span id="stepsTaken">0</span></div>
         <div><strong>🌳 Treants Placed:</strong> <span id="treantCount">0</span></div>
+        <div><strong>🗑️ Removed Treants:</strong> <span id="removedTreants">None</span></div>
+        <button onclick="clearRemovedTreants()" style="margin-top: 5px; padding: 5px 10px;">Clear Removed Treants</button>
     </div>
     "#,
     );
@@ -168,6 +170,7 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         function updateStep(step) {{
             console.log('updateStep called with step:', step);
             console.log('simulationSteps.length:', simulationSteps.length);
+            console.log('window.simulationSteps.length:', window.simulationSteps ? window.simulationSteps.length : 'undefined');
             
             if (!simulationSteps || simulationSteps.length === 0) {{
                 console.error('simulationSteps is empty or undefined');
@@ -186,6 +189,7 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
                 for (let j = 0; j < input.N; j++) {{
                     const cell = document.getElementById(`cell-${{i}}-${{j}}`);
                     cell.className = cell.className.replace(/ adventurer| confirmed| target| treant/g, '');
+                    // Don't clear click events - they will be re-added for treants
                     // Reset text content to original state
                     if (input.b[i][j] === 'T') {{
                         cell.textContent = 'T';
@@ -194,6 +198,7 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
                     }} else {{
                         cell.textContent = '.';
                     }}
+                    cell.style.cursor = 'default';
                 }}
             }}
             
@@ -241,6 +246,13 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
                         if (cell && !cell.className.includes('adventurer')) {{
                             cell.className += ' treant';
                             cell.textContent = 'T';
+                            // Add click event to remove treant
+                            cell.onclick = function(e) {{
+                                e.preventDefault();
+                                e.stopPropagation();
+                                removeTreant(pos[0], pos[1]);
+                            }};
+                            cell.style.cursor = 'pointer';
                         }}
                     }}
                 }});
@@ -307,6 +319,337 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
             }}
         }}
         
+        function removeTreant(i, j) {{
+            // Store removed treants in localStorage
+            let removedTreants = JSON.parse(localStorage.getItem('removedTreants') || '[]');
+            
+            // Check if already removed
+            const alreadyRemoved = removedTreants.some(([ri, rj]) => ri === i && rj === j);
+            if (!alreadyRemoved) {{
+                removedTreants.push([i, j]);
+                localStorage.setItem('removedTreants', JSON.stringify(removedTreants));
+                console.log(`Removed treant at (${{i}}, ${{j}}). Total removed: ${{removedTreants.length}}`);
+            }}
+            
+            // Update display
+            updateRemovedTreantsDisplay();
+            
+            // Trigger re-simulation
+            reRunSimulation();
+        }}
+        
+        function reRunSimulation() {{
+            const removedTreants = JSON.parse(localStorage.getItem('removedTreants') || '[]');
+            
+            // Create a new simulation with removed treants excluded
+            const newSimulationSteps = generateNewSimulation(removedTreants);
+            
+            if (newSimulationSteps && newSimulationSteps.length > 0) {{
+                // Update global simulation data
+                window.simulationSteps = newSimulationSteps;
+                simulationSteps = newSimulationSteps; // Update the global variable used by updateStep
+                
+                console.log(`New simulation has ${{newSimulationSteps.length}} steps`);
+                
+                // Reset to first step
+                currentStep = 0;
+                updateStep(0);
+                
+                // Update slider
+                const slider = document.getElementById('stepSlider');
+                const sliderValue = document.getElementById('stepSliderValue');
+                if (slider && sliderValue) {{
+                    slider.max = newSimulationSteps.length - 1;
+                    slider.value = 0;
+                    sliderValue.textContent = '0';
+                }}
+                
+                alert('Simulation re-run with updated treant placements!');
+            }} else {{
+                alert('Failed to generate new simulation. Please check the console for errors.');
+            }}
+        }}
+        
+        function generateNewSimulation(removedTreants) {{
+            console.log(`Re-simulating with ${{removedTreants.length}} treants removed`);
+            
+            // Get the original forest state
+            const originalForest = input.b.map(row => [...row]);
+            
+            // Get all treants from the original simulation
+            const originalSteps = window.originalSimulationSteps || simulationSteps;
+            const allTreants = new Set();
+            
+            // Collect all treants that were placed during the simulation
+            originalSteps.forEach(step => {{
+                if (step.treants) {{
+                    step.treants.forEach(([i, j]) => {{
+                        allTreants.add(`${{i}},${{j}}`);
+                    }});
+                }}
+            }});
+            
+            // Create new forest with all original treants
+            const newForest = originalForest.map(row => [...row]);
+            
+            // Add all treants from simulation to the forest
+            allTreants.forEach(treantKey => {{
+                const [i, j] = treantKey.split(',').map(Number);
+                if (i < newForest.length && j < newForest[i].length) {{
+                    newForest[i][j] = 'T';
+                }}
+            }});
+            
+            // Remove the specified treants from the forest
+            removedTreants.forEach(([i, j]) => {{
+                if (i < newForest.length && j < newForest[i].length) {{
+                    newForest[i][j] = '.';
+                }}
+            }});
+            
+            // Run complete simulation
+            const newSteps = runCompleteSimulation(newForest, input.t, input.N);
+            
+            return newSteps;
+        }}
+        
+        function runCompleteSimulation(forest, flowerPos, n) {{
+            const steps = [];
+            const entrance = [0, Math.floor(n / 2)];
+            
+            // Initialize simulation state
+            let currentPos = [...entrance];
+            let revealed = new Set();
+            revealed.add(`${{entrance[0]}},${{entrance[1]}}`);
+            let confirmed = new Set();
+            confirmed.add(`${{entrance[0]}},${{entrance[1]}}`);
+            let target = null;
+            let treants = [];
+            
+            // Find all treants in the forest
+            for (let i = 0; i < n; i++) {{
+                for (let j = 0; j < n; j++) {{
+                    if (forest[i][j] === 'T') {{
+                        treants.push([i, j]);
+                    }}
+                }}
+            }}
+            
+            console.log(`Starting simulation with ${{treants.length}} treants`);
+            
+            let turn = 0;
+            const maxTurns = 1000; // Prevent infinite loops
+            
+            while (turn < maxTurns) {{
+                // Check if reached flower
+                if (currentPos[0] === flowerPos[0] && currentPos[1] === flowerPos[1]) {{
+                    break;
+                }}
+                
+                // Reveal cells in four directions
+                const newRevealed = revealCells(forest, currentPos, n, revealed);
+                newRevealed.forEach(cell => {{
+                    revealed.add(cell);
+                    confirmed.add(cell);
+                }});
+                
+                // Check if flower is revealed
+                const flowerKey = `${{flowerPos[0]}},${{flowerPos[1]}}`;
+                if (revealed.has(flowerKey)) {{
+                    target = [...flowerPos];
+                }} else if (target && !isReachable(forest, currentPos, target, n, revealed)) {{
+                    target = null;
+                }}
+                
+                // Set new target if needed
+                if (!target) {{
+                    const reachableUnrevealed = findReachableUnrevealed(forest, currentPos, n, revealed);
+                    if (reachableUnrevealed.length > 0) {{
+                        target = reachableUnrevealed[Math.floor(Math.random() * reachableUnrevealed.length)];
+                    }} else {{
+                        break; // No more moves possible
+                    }}
+                }}
+                
+                // Move towards target
+                const nextPos = moveTowardsTarget(forest, currentPos, target, n, revealed);
+                if (nextPos[0] === currentPos[0] && nextPos[1] === currentPos[1]) {{
+                    break; // Cannot move
+                }}
+                
+                currentPos = nextPos;
+                
+                // Record step
+                steps.push({{
+                    adventurerPos: [...currentPos],
+                    confirmed: Array.from(confirmed).map(key => {{
+                        const [i, j] = key.split(',').map(Number);
+                        return [i, j];
+                    }}),
+                    target: target ? [...target] : null,
+                    treants: [...treants]
+                }});
+                
+                turn++;
+            }}
+            
+            return steps;
+        }}
+        
+        function revealCells(forest, pos, n, revealed) {{
+            const newRevealed = [];
+            const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+            
+            directions.forEach(([di, dj]) => {{
+                let i = pos[0] + di;
+                let j = pos[1] + dj;
+                
+                while (i >= 0 && i < n && j >= 0 && j < n) {{
+                    const key = `${{i}},${{j}}`;
+                    if (!revealed.has(key)) {{
+                        newRevealed.push(key);
+                    }}
+                    
+                    if (forest[i][j] === 'T') {{
+                        break; // Hit a tree
+                    }}
+                    
+                    i += di;
+                    j += dj;
+                }}
+            }});
+            
+            return newRevealed;
+        }}
+        
+        function isReachable(forest, start, end, n, revealed) {{
+            const queue = [[...start, 0]];
+            const visited = new Set();
+            visited.add(`${{start[0]}},${{start[1]}}`);
+            
+            while (queue.length > 0) {{
+                const [i, j, dist] = queue.shift();
+                
+                if (i === end[0] && j === end[1]) {{
+                    return true;
+                }}
+                
+                const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                directions.forEach(([di, dj]) => {{
+                    const ni = i + di;
+                    const nj = j + dj;
+                    
+                    if (ni >= 0 && ni < n && nj >= 0 && nj < n) {{
+                        const key = `${{ni}},${{nj}}`;
+                        if (!visited.has(key) && forest[ni][nj] !== 'T') {{
+                            visited.add(key);
+                            queue.push([ni, nj, dist + 1]);
+                        }}
+                    }}
+                }});
+            }}
+            
+            return false;
+        }}
+        
+        function findReachableUnrevealed(forest, pos, n, revealed) {{
+            const reachable = [];
+            const queue = [[...pos]];
+            const visited = new Set();
+            visited.add(`${{pos[0]}},${{pos[1]}}`);
+            
+            while (queue.length > 0) {{
+                const [i, j] = queue.shift();
+                
+                const key = `${{i}},${{j}}`;
+                if (!revealed.has(key)) {{
+                    reachable.push([i, j]);
+                }}
+                
+                const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                directions.forEach(([di, dj]) => {{
+                    const ni = i + di;
+                    const nj = j + dj;
+                    
+                    if (ni >= 0 && ni < n && nj >= 0 && nj < n) {{
+                        const nkey = `${{ni}},${{nj}}`;
+                        if (!visited.has(nkey) && forest[ni][nj] !== 'T') {{
+                            visited.add(nkey);
+                            queue.push([ni, nj]);
+                        }}
+                    }}
+                }});
+            }}
+            
+            return reachable;
+        }}
+        
+        function moveTowardsTarget(forest, currentPos, target, n, revealed) {{
+            if (!target) return [...currentPos];
+            
+            // Calculate distances to target
+            const distances = calculateDistances(forest, target, n, revealed);
+            const currentDist = distances[currentPos[0]][currentPos[1]];
+            
+            // Find best move
+            const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+            let bestMove = [...currentPos];
+            
+            directions.forEach(([di, dj]) => {{
+                const ni = currentPos[0] + di;
+                const nj = currentPos[1] + dj;
+                
+                if (ni >= 0 && ni < n && nj >= 0 && nj < n) {{
+                    if (forest[ni][nj] !== 'T' && distances[ni][nj] < currentDist) {{
+                        bestMove = [ni, nj];
+                    }}
+                }}
+            }});
+            
+            return bestMove;
+        }}
+        
+        function calculateDistances(forest, target, n, revealed) {{
+            const distances = Array(n).fill().map(() => Array(n).fill(Infinity));
+            const queue = [[...target, 0]];
+            distances[target[0]][target[1]] = 0;
+            
+            while (queue.length > 0) {{
+                const [i, j, dist] = queue.shift();
+                
+                const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                directions.forEach(([di, dj]) => {{
+                    const ni = i + di;
+                    const nj = j + dj;
+                    
+                    if (ni >= 0 && ni < n && nj >= 0 && nj < n) {{
+                        if (forest[ni][nj] !== 'T' && distances[ni][nj] > dist + 1) {{
+                            distances[ni][nj] = dist + 1;
+                            queue.push([ni, nj, dist + 1]);
+                        }}
+                    }}
+                }});
+            }}
+            
+            return distances;
+        }}
+        
+        function updateRemovedTreantsDisplay() {{
+            const removedTreants = JSON.parse(localStorage.getItem('removedTreants') || '[]');
+            const display = document.getElementById('removedTreants');
+            if (removedTreants.length === 0) {{
+                display.textContent = 'None';
+            }} else {{
+                display.textContent = removedTreants.map(pos => `(${{pos[0]}}, ${{pos[1]}})`).join(', ');
+            }}
+        }}
+        
+        function clearRemovedTreants() {{
+            localStorage.removeItem('removedTreants');
+            updateRemovedTreantsDisplay();
+            alert('Removed treants cleared!');
+        }}
+        
         // Initialize slider
         function initSlider() {{
             const slider = document.getElementById('stepSlider');
@@ -328,6 +671,11 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         // Initialize
         initGrid();
         initSlider();
+        updateRemovedTreantsDisplay();
+        
+        // Store original simulation data for re-simulation
+        window.originalSimulationSteps = simulationSteps;
+        
         if (simulationSteps && simulationSteps.length > 0) {{
             updateStep(0);
         }} else {{

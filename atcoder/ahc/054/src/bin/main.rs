@@ -22,6 +22,7 @@ where
 }
 
 const DIJ: [(usize, usize); 4] = [(!0, 0), (1, 0), (0, !0), (0, 1)];
+
 // 上下左右に木があるかどうか
 fn exist_around_tree(bss: &Vec<Vec<char>>, ti: usize, tj: usize) -> bool {
     for (di, dj) in DIJ {
@@ -43,6 +44,7 @@ fn put_diagonal(
     tj: usize,
     direction: i64,
 ) -> Vec<(usize, usize)> {
+    let original_bss = bss.clone();
     let n = bss.len() as i64;
     let mut treant_placements = Vec::new();
     let mut tmp_ti = ti as i64;
@@ -50,7 +52,7 @@ fn put_diagonal(
     while tmp_ti < n - 1 && tmp_tj < n - 1 && tmp_ti >= 0 && tmp_tj >= 0 {
         if bss[tmp_ti as usize][tmp_tj as usize] == '.'
             && !confirmed.contains(&(tmp_ti as usize, tmp_tj as usize))
-            && !exist_around_tree(bss, tmp_ti as usize, tmp_tj as usize)
+            && !exist_around_tree(&original_bss, tmp_ti as usize, tmp_tj as usize)
         {
             if (tmp_ti == n - 2 || tmp_tj == n - 2)
                 && bss[(tmp_ti + direction) as usize][(tmp_tj + direction) as usize] == 'T'
@@ -97,17 +99,21 @@ fn surround_flower(
     confirmed: &HashSet<(usize, usize)>,
     t: (usize, usize),
 ) -> Vec<(usize, usize)> {
-    const SURROUND_FLOWER: [[(i64, i64); 5]; 8] = [
+    let n: usize = bss.len();
+
+    let mut SURROUND_FLOWER: [[(i64, i64); 5]; 8] = [
         [(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)],
-        [(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],
         [(0, -1), (-1, 0), (0, 1), (1, 1), (2, 0)],
-        [(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)],
         [(-1, 0), (0, 1), (1, 0), (1, -1), (0, -2)],
+        [(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)],
+        [(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],
+        [(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)],
         [(-1, 0), (0, 1), (1, 0), (-1, -1), (0, -2)],
         [(0, 1), (1, 0), (0, -1), (-1, -1), (-2, 0)],
-        [(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)],
     ];
-    let n = bss.len();
+    if t.1 > n / 2 {
+        SURROUND_FLOWER.reverse();
+    }
     let mut best_bss = bss.clone();
     let mut best_treant_placements = Vec::new();
     let mut best_length = 0;
@@ -129,9 +135,9 @@ fn surround_flower(
                 }
             }
         }
-        let (can_reach, length) = can_reach_flower(&tmp_bss, 0, n / 2);
-        if can_reach && length > best_length {
-            best_length = length;
+        let (can_reach, _) = can_reach_flower(&tmp_bss, 0, n / 2);
+        if can_reach && treant_placements.len() > best_length {
+            best_length = treant_placements.len();
             best_treant_placements = treant_placements;
             best_bss = tmp_bss;
         }
@@ -149,7 +155,6 @@ fn init_tree(
 ) -> Vec<(usize, usize)> {
     let n = bss.len();
     let mut treant_placements = Vec::new();
-    treant_placements.extend(surround_flower(bss, &confirmed, t));
     // 3つ飛ばしで斜めに線を引く
     for i in (0..n).step_by(3) {
         treant_placements.extend(put_diagonal(bss, &confirmed, 0, i + start_pos, direction));
@@ -241,7 +246,7 @@ impl Sim {
         }
         let mut changed = false;
         for (di, dj) in DIJ {
-            let mut i2 = self.p.0;
+            let mut i2: usize = self.p.0;
             let mut j2 = self.p.1;
             while i2 < self.n && j2 < self.n {
                 if self.revealed[i2 * self.n + j2].setmax(true) {
@@ -411,47 +416,51 @@ fn solve(
         }
     }
     q.shuffle(&mut rng);
-
+    let mut surround_bss: Vec<Vec<char>> = bss.clone();
+    let surround_placements = surround_flower(&mut surround_bss, &confirmed, (ti, tj));
+    let mut best_bss: Vec<Vec<char>> = surround_bss.clone();
     let mut best_placements = Vec::new();
-    let mut max_steps = 0;
-    let mut best_bss: Vec<Vec<char>> = bss.clone();
+    let mut best_score = 0;
     for i in 0..3 {
-        let mut tmp_bss: Vec<Vec<char>> = bss.clone();
+        let mut tmp_bss: Vec<Vec<char>> = surround_bss.clone();
         let treant_placements = init_tree(&mut tmp_bss, &confirmed, i, 1, (ti, tj));
-        let steps = simulate(&tmp_bss, pi, pj, (ti, tj), q.clone());
-
-        if steps > max_steps {
-            max_steps = steps;
+        let score = simulate(&tmp_bss, pi, pj, (ti, tj), q.clone());
+        if score > best_score {
+            best_score = score;
             best_placements = treant_placements;
             best_bss = tmp_bss;
         }
     }
+    best_placements.extend(surround_placements);
     // 以下時間まで焼きなまし
-    let mut current_placements = best_placements.clone();
-    let mut current_bss = best_bss.clone();
-    let mut current_score = max_steps;
     let mut iteration = 0;
+    let mut empty_placements = HashSet::new();
+    for i in 0..bss.len() {
+        for j in 0..bss.len() {
+            if best_bss[i][j] == '.' && !confirmed.contains(&(i, j)) {
+                empty_placements.insert((i, j));
+            }
+        }
+    }
     while start_time.elapsed() < std::time::Duration::from_millis(1900) {
-        let mut new_bss = current_bss.clone();
-        let mut new_placements = current_placements.clone();
+        let mut new_bss = best_bss.clone();
+        let mut new_placements = best_placements.clone();
+        let mut new_empty_placements = empty_placements.clone();
 
         // 近傍操作: トレントを1つ追加/削除/移動
         let operation = rng.gen_range(0..3);
         match operation {
             0 => {
                 // 追加: 空きマスにトレントを追加
-                let mut candidates = Vec::new();
-                for i in 0..bss.len() {
-                    for j in 0..bss.len() {
-                        if new_bss[i][j] == '.' && !confirmed.contains(&(i, j)) {
-                            candidates.push((i, j));
-                        }
-                    }
-                }
-                if !candidates.is_empty() {
-                    let pos = candidates[rng.gen_range(0..candidates.len())];
+                if !new_empty_placements.is_empty() {
+                    let pos = new_empty_placements
+                        .iter()
+                        .nth(rng.gen_range(0..new_empty_placements.len()))
+                        .unwrap()
+                        .clone();
+                    new_empty_placements.remove(&pos);
                     new_bss[pos.0][pos.1] = 'T';
-                    new_placements.push(pos);
+                    new_placements.push(pos.clone());
                 }
             }
             1 => {
@@ -466,21 +475,17 @@ fn solve(
                 // 移動: トレントを別の場所に移動
                 if !new_placements.is_empty() {
                     let idx = rng.gen_range(0..new_placements.len());
-                    let old_pos = new_placements[idx];
+                    let old_pos: (usize, usize) = new_placements[idx];
                     new_bss[old_pos.0][old_pos.1] = '.';
-
-                    let mut candidates = Vec::new();
-                    for i in 0..bss.len() {
-                        for j in 0..bss.len() {
-                            if new_bss[i][j] == '.' && !confirmed.contains(&(i, j)) {
-                                candidates.push((i, j));
-                            }
-                        }
-                    }
-                    if !candidates.is_empty() {
-                        let new_pos = candidates[rng.gen_range(0..candidates.len())];
+                    if !new_empty_placements.is_empty() {
+                        let new_pos = new_empty_placements
+                            .iter()
+                            .nth(rng.gen_range(0..new_empty_placements.len()))
+                            .unwrap()
+                            .clone();
+                        new_empty_placements.remove(&new_pos);
                         new_bss[new_pos.0][new_pos.1] = 'T';
-                        new_placements[idx] = new_pos;
+                        new_placements[idx] = new_pos.clone();
                     } else {
                         new_bss[old_pos.0][old_pos.1] = 'T'; // 元に戻す
                     }
@@ -492,18 +497,14 @@ fn solve(
         // 新しい配置でシミュレーション
         let new_score = simulate(&new_bss, pi, pj, (ti, tj), q.clone());
 
-        // 焼きなましの受理判定
-        let _temperature = 1000.0 * (1.0 - start_time.elapsed().as_millis() as f64 / 1800.0);
-        let delta = new_score as f64 - current_score as f64;
-        let accept = delta > 0.0;
-
-        if accept {
-            current_placements = new_placements;
-            current_bss = new_bss;
-            current_score = new_score;
+        if new_score > best_score {
+            empty_placements = new_empty_placements;
+            best_placements = new_placements;
+            best_bss = new_bss;
+            best_score = new_score;
         }
         iteration += 1;
     }
     eprintln!("iteration: {}", iteration);
-    current_placements
+    best_placements
 }
