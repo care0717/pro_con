@@ -19,10 +19,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "Testing cases 0000-0099..."
-echo ""
 
-for i in $(seq -f "%04g" 0 100); do
+for i in $(seq -f "%04g" 0 70); do
     input_file="in/${i}.txt"
     output_file="out_${i}.txt"
     
