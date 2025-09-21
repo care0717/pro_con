@@ -1,25 +1,4 @@
-use std::collections::HashSet;
-pub trait SetMinMax {
-    fn setmin(&mut self, v: Self) -> bool;
-    fn setmax(&mut self, v: Self) -> bool;
-}
-impl<T> SetMinMax for T
-where
-    T: PartialOrd,
-{
-    fn setmin(&mut self, v: T) -> bool {
-        *self > v && {
-            *self = v;
-            true
-        }
-    }
-    fn setmax(&mut self, v: T) -> bool {
-        *self < v && {
-            *self = v;
-            true
-        }
-    }
-}
+use std::collections::{HashMap, HashSet, VecDeque};
 
 const DIJ: [(usize, usize); 4] = [(!0, 0), (1, 0), (0, !0), (0, 1)];
 
@@ -69,54 +48,62 @@ fn put_diagonal(
     treant_placements
 }
 
-fn can_reach_flower(bss: &Vec<Vec<char>>, start_ti: usize, start_tj: usize) -> (bool, usize) {
-    let mut queue = Vec::new();
-    queue.push((start_ti, start_tj, 0)); // (i, j, steps)
+fn can_reach_goals(
+    bss: &Vec<Vec<char>>,
+    start_ti: usize,
+    start_tj: usize,
+    goals: &[(usize, usize)],
+) -> bool {
+    let n = bss.len();
+    let goal_set: HashSet<_> = goals.iter().cloned().collect();
+    let mut remaining_goals = goal_set.clone();
+
+    if remaining_goals.is_empty() {
+        return true;
+    }
+
+    let mut queue = VecDeque::new();
+    queue.push_back((start_ti, start_tj, 0));
     let mut visited = HashSet::new();
     visited.insert((start_ti, start_tj));
 
-    while !queue.is_empty() {
-        let (i, j, steps) = queue.pop().unwrap();
-        if bss[i][j] == 'F' {
-            return (true, steps);
-        }
+    remaining_goals.remove(&(start_ti, start_tj));
+    while !queue.is_empty() && !remaining_goals.is_empty() {
+        let (i, j, steps) = queue.pop_front().unwrap();
+
         for (di, dj) in DIJ {
-            let ni = i + di;
-            let nj = j + dj;
-            if ni < bss.len() && nj < bss[0].len() {
-                if bss[ni][nj] != 'T' && !visited.contains(&(ni, nj)) {
-                    visited.insert((ni, nj));
-                    queue.push((ni, nj, steps + 1));
-                }
+            let ni = i.wrapping_add(di);
+            let nj = j.wrapping_add(dj);
+
+            if ni < n && nj < n && bss[ni][nj] != 'T' && visited.insert((ni, nj)) {
+                remaining_goals.remove(&(ni, nj));
+                queue.push_back((ni, nj, steps + 1));
             }
         }
     }
-    (false, 0)
+    remaining_goals.is_empty()
 }
-
 fn surround_flower(
     bss: &mut Vec<Vec<char>>,
     confirmed: &HashSet<(usize, usize)>,
     t: (usize, usize),
+    must_reach: &Vec<(usize, usize)>,
 ) -> Vec<(usize, usize)> {
     let n: usize = bss.len();
 
-    let mut SURROUND_FLOWER: [[(i64, i64); 5]; 8] = [
-        [(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)],
-        [(0, -1), (-1, 0), (0, 1), (1, 1), (2, 0)],
-        [(-1, 0), (0, 1), (1, 0), (1, -1), (0, -2)],
-        [(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)],
-        [(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],
-        [(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)],
-        [(-1, 0), (0, 1), (1, 0), (-1, -1), (0, -2)],
-        [(0, 1), (1, 0), (0, -1), (-1, -1), (-2, 0)],
+    let SURROUND_FLOWER: Vec<Vec<(i64, i64)>> = vec![
+        vec![(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)],
+        vec![(0, -1), (-1, 0), (0, 1), (1, 1), (2, 0)],
+        vec![(-1, 0), (0, 1), (1, 0), (1, -1), (0, -2)],
+        vec![(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)],
+        vec![(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],
+        vec![(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)],
+        vec![(-1, 0), (0, 1), (1, 0), (-1, -1), (0, -2)],
+        vec![(0, 1), (1, 0), (0, -1), (-1, -1), (-2, 0)],
     ];
-    if t.1 > n / 2 {
-        SURROUND_FLOWER.reverse();
-    }
+
     let mut best_bss = bss.clone();
     let mut best_treant_placements = Vec::new();
-    let mut best_length = 0;
     for candidate in SURROUND_FLOWER {
         let mut treant_placements = Vec::new();
         let mut tmp_bss = bss.clone();
@@ -135,14 +122,14 @@ fn surround_flower(
                 }
             }
         }
-        let (can_reach, _) = can_reach_flower(&tmp_bss, 0, n / 2);
-        if can_reach && treant_placements.len() > best_length {
-            best_length = treant_placements.len();
+        if can_reach_goals(&tmp_bss, 0, n / 2, must_reach) {
             best_treant_placements = treant_placements;
             best_bss = tmp_bss;
+            break;
         }
     }
     *bss = best_bss;
+
     return best_treant_placements;
 }
 
@@ -332,66 +319,6 @@ fn simulate(
     }
 }
 
-fn main() {
-    use std::io::{self, BufRead, Write};
-    let start_time = std::time::Instant::now();
-    // Read initial input manually
-    let stdin = io::stdin();
-    let mut lines = stdin.lock().lines();
-
-    // Read N, ti, tj
-    let first_line = lines.next().unwrap().unwrap();
-    let mut parts = first_line.trim().split_whitespace();
-    let n: usize = parts.next().unwrap().parse().unwrap();
-    let ti: usize = parts.next().unwrap().parse().unwrap();
-    let tj: usize = parts.next().unwrap().parse().unwrap();
-
-    // Read forest grid
-    let mut bss: Vec<Vec<char>> = Vec::new();
-    for _ in 0..n {
-        let line = lines.next().unwrap().unwrap();
-        let row: Vec<char> = line.trim().chars().collect();
-        bss.push(row);
-    }
-    bss[ti][tj] = 'F';
-
-    let mut turn = 0;
-    loop {
-        let line = lines.next().unwrap().unwrap();
-        let mut parts = line.trim().split_whitespace();
-        let pi: usize = parts.next().unwrap().parse().unwrap();
-        let pj: usize = parts.next().unwrap().parse().unwrap();
-
-        let line = lines.next().unwrap().unwrap();
-        let mut parts = line.trim().split_whitespace();
-        let num_confirmed: usize = parts.next().unwrap().parse().unwrap();
-
-        let mut confirmed = HashSet::new();
-        for _ in 0..num_confirmed {
-            let x: usize = parts.next().unwrap().parse().unwrap();
-            let y: usize = parts.next().unwrap().parse().unwrap();
-            confirmed.insert((x, y));
-        }
-
-        // Check if adventurer reached the flower
-        if pi == ti && pj == tj {
-            break;
-        }
-        if turn == 0 {
-            let best_placements = solve(start_time, &bss, &confirmed, pi, pj, ti, tj);
-            print!("{}", best_placements.len());
-            for (x, y) in best_placements {
-                print!(" {} {}", x, y);
-            }
-            println!();
-        } else {
-            println!("0");
-        }
-        turn += 1;
-        io::stdout().flush().unwrap();
-    }
-}
-
 fn solve(
     start_time: std::time::Instant,
     bss: &Vec<Vec<char>>,
@@ -417,22 +344,31 @@ fn solve(
     }
     q.shuffle(&mut rng);
     let mut surround_bss: Vec<Vec<char>> = bss.clone();
-    let surround_placements = surround_flower(&mut surround_bss, &confirmed, (ti, tj));
-    let mut best_bss: Vec<Vec<char>> = surround_bss.clone();
-    let mut best_placements = Vec::new();
-    let mut best_score = 0;
-    for i in 0..3 {
-        let mut tmp_bss: Vec<Vec<char>> = surround_bss.clone();
-        let treant_placements = init_tree(&mut tmp_bss, &confirmed, i, 1, (ti, tj));
-        let score = simulate(&tmp_bss, pi, pj, (ti, tj), q.clone());
-        if score > best_score {
-            best_score = score;
-            best_placements = treant_placements;
-            best_bss = tmp_bss;
+    let mut must_reach: Vec<(usize, usize)> = vec![(ti, tj)];
+    let mut surround_placements =
+        surround_flower(&mut surround_bss, &confirmed, (ti, tj), &must_reach);
+    let mut tmp_ti = (ti + ((n - 1 - ti) / 3) * 3) as i64;
+    while tmp_ti >= 0 {
+        let mut tmp_tj = tj % 3;
+        while tmp_tj < n {
+            if bss[tmp_ti as usize][tmp_tj] == '.' {
+                must_reach.push((tmp_ti as usize, tmp_tj));
+                let placements = surround_flower(
+                    &mut surround_bss,
+                    &confirmed,
+                    (tmp_ti as usize, tmp_tj),
+                    &must_reach,
+                );
+                surround_placements.extend(placements);
+            }
+            tmp_tj += 3;
         }
+        tmp_ti -= 3;
     }
-    best_placements.extend(surround_placements);
-    // 以下時間まで焼きなまし
+    let mut best_bss: Vec<Vec<char>> = surround_bss.clone();
+    let mut best_placements = surround_placements.clone();
+    let mut best_score = 0;
+
     let mut iteration = 0;
     let mut empty_placements = HashSet::new();
     for i in 0..bss.len() {
@@ -442,7 +378,7 @@ fn solve(
             }
         }
     }
-    while start_time.elapsed() < std::time::Duration::from_millis(1900) {
+    while start_time.elapsed() < std::time::Duration::from_millis(1) {
         let mut new_bss = best_bss.clone();
         let mut new_placements = best_placements.clone();
         let mut new_empty_placements = empty_placements.clone();
@@ -505,6 +441,96 @@ fn solve(
         }
         iteration += 1;
     }
-    eprintln!("iteration: {}", iteration);
+    eprintln!("iteration: {}, {:?}", iteration, start_time.elapsed());
     best_placements
+}
+
+fn main() {
+    use std::io::{self, BufRead, Write};
+    let start_time = std::time::Instant::now();
+    // Read initial input manually
+    let stdin = io::stdin();
+    let mut lines = stdin.lock().lines();
+
+    // Read N, ti, tj
+    let first_line = lines.next().unwrap().unwrap();
+    let mut parts = first_line.trim().split_whitespace();
+    let n: usize = parts.next().unwrap().parse().unwrap();
+    let ti: usize = parts.next().unwrap().parse().unwrap();
+    let tj: usize = parts.next().unwrap().parse().unwrap();
+
+    // Read forest grid
+    let mut bss: Vec<Vec<char>> = Vec::new();
+    for _ in 0..n {
+        let line = lines.next().unwrap().unwrap();
+        let row: Vec<char> = line.trim().chars().collect();
+        bss.push(row);
+    }
+
+    let mut turn = 0;
+    loop {
+        let line = lines.next().unwrap().unwrap();
+        let mut parts = line.trim().split_whitespace();
+        let pi: usize = parts.next().unwrap().parse().unwrap();
+        let pj: usize = parts.next().unwrap().parse().unwrap();
+
+        let line = lines.next().unwrap().unwrap();
+        let mut parts = line.trim().split_whitespace();
+        let num_confirmed: usize = parts.next().unwrap().parse().unwrap();
+
+        let mut confirmed = HashSet::new();
+        for _ in 0..num_confirmed {
+            let x: usize = parts.next().unwrap().parse().unwrap();
+            let y: usize = parts.next().unwrap().parse().unwrap();
+            confirmed.insert((x, y));
+        }
+
+        // Check if adventurer reached the flower
+        if pi == ti && pj == tj {
+            break;
+        }
+        if turn == 0 {
+            let best_placements = solve(start_time, &bss, &confirmed, pi, pj, ti, tj);
+            print!("{}", best_placements.len());
+            for (x, y) in best_placements {
+                print!(" {} {}", x, y);
+            }
+            println!();
+        } else {
+            println!("0");
+        }
+        turn += 1;
+        io::stdout().flush().unwrap();
+    }
+}
+
+fn print_bss(bss: &Vec<Vec<char>>) {
+    for row in bss.iter() {
+        for &cell in row.iter() {
+            eprint!("{}", cell);
+        }
+        eprintln!();
+    }
+    eprintln!();
+}
+pub trait SetMinMax {
+    fn setmin(&mut self, v: Self) -> bool;
+    fn setmax(&mut self, v: Self) -> bool;
+}
+impl<T> SetMinMax for T
+where
+    T: PartialOrd,
+{
+    fn setmin(&mut self, v: T) -> bool {
+        *self > v && {
+            *self = v;
+            true
+        }
+    }
+    fn setmax(&mut self, v: T) -> bool {
+        *self < v && {
+            *self = v;
+            true
+        }
+    }
 }
