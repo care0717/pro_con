@@ -81,38 +81,6 @@ fn put_tree_around_no_tree(
     treant_placements
 }
 
-fn not_around_goal(p: (usize, usize), t: (usize, usize)) -> bool {
-    for (di, dj) in DIJ {
-        let ni = t.0 + di;
-        let nj = t.1 + dj;
-        if ni == p.0 && nj == p.1 {
-            return false;
-        }
-    }
-    true
-}
-fn delete_three_tree(
-    bss: &mut Vec<Vec<char>>,
-    placements: &mut Vec<(usize, usize)>,
-    t: (usize, usize),
-) {
-    let n = bss.len();
-    for i in 0..n {
-        for j in 0..n - 2 {
-            if bss[i][j] == 'T'
-                && bss[i][j + 1] == 'T'
-                && bss[i][j + 2] == 'T'
-                && not_around_goal((i, j + 1), t)
-                && placements.contains(&(i, j + 1))
-            {
-                eprintln!("delete: {:?}", (i, j + 1));
-                bss[i][j + 1] = '.';
-                placements.retain(|(x, y)| *x != i || *y != j + 1);
-            }
-        }
-    }
-}
-
 fn can_reach_goals(
     bss: &Vec<Vec<char>>,
     start_ti: usize,
@@ -221,7 +189,7 @@ fn solve(
     pj: usize,
     ti: usize,
     tj: usize,
-) -> (Vec<(usize, usize)>, Vec<Vec<char>>, HashSet<(usize, usize)>) {
+) -> Vec<(usize, usize)> {
     // Generate q: all cells except entrance in random order
     use rand::prelude::*;
     let mut rng = thread_rng();
@@ -261,46 +229,64 @@ fn solve(
         ]
     };
 
+    let mut best_bss: Vec<Vec<char>> = bss.clone();
+    let mut best_placements: Vec<(usize, usize)> = Vec::new();
+    let mut best_score = 0;
+
     let ti_mod = 3;
     let tj_mod: usize = 5;
     let mut tmp_bss: Vec<Vec<char>> = bss.clone();
     let mut must_reach: Vec<(usize, usize)> = vec![(ti, tj)];
-    let mut count = (n - 1 - ti) / ti_mod;
-    let mut tmp_ti = (ti + count * ti_mod) as i64;
-    let diff: [usize; 5] = if tj >= n / 2 {
-        [0, 2, 4, 1, 3]
-    } else {
-        [0, 3, 1, 4, 2]
-    };
+    let mut tmp_ti = (ti + ((n - 1 - ti) / ti_mod) * ti_mod) as i64;
     while tmp_ti >= 0 {
-        let mut tmp_tj = (tj + diff[count % 5]) % tj_mod;
+        let mut tmp_tj = tj % tj_mod;
         while tmp_tj < n {
-            if bss[tmp_ti as usize][tmp_tj] == '.' && !(tmp_ti as usize == ti && tmp_tj == tj) {
+            if bss[tmp_ti as usize][tmp_tj] == '.' {
                 must_reach.push((tmp_ti as usize, tmp_tj));
             }
             tmp_tj += tj_mod;
         }
         tmp_ti -= ti_mod as i64;
-        count = (count + 4) % 5;
     }
-    let mut tmp_placements = Vec::new();
-    for (tmp_ti, tmp_tj) in must_reach.clone() {
-        let placements = surround_flower(
-            &mut tmp_bss,
-            &confirmed,
-            (tmp_ti as usize, tmp_tj),
-            &must_reach,
-            &surround_placements,
-        );
-        tmp_placements.extend(placements);
+    let mut tmp_placements = surround_flower(
+        &mut tmp_bss,
+        &confirmed,
+        (ti, tj),
+        &must_reach,
+        &surround_placements,
+    );
+    let mut tmp_ti = (ti + ((n - 1 - ti) / ti_mod) * ti_mod) as i64;
+    while tmp_ti >= 0 {
+        let mut tmp_tj = tj % tj_mod;
+        while tmp_tj < n {
+            if tmp_tj == tj && (tmp_ti == (ti + ti_mod) as i64 || tmp_ti == (ti - ti_mod) as i64) {
+                tmp_tj += tj_mod;
+                continue;
+            }
+            if bss[tmp_ti as usize][tmp_tj] == '.' {
+                let placements = surround_flower(
+                    &mut tmp_bss,
+                    &confirmed,
+                    (tmp_ti as usize, tmp_tj),
+                    &must_reach,
+                    &surround_placements,
+                );
+                tmp_placements.extend(placements);
+            }
+            tmp_tj += tj_mod;
+        }
+        tmp_ti -= ti_mod as i64;
     }
-    tmp_placements.extend(put_tree_around_no_tree(&mut tmp_bss, &confirmed, ti, tj));
+    let score = simulate(&tmp_bss, pi, pj, (ti, tj), q.clone());
+    if score > best_score {
+        best_score = score;
+        best_placements = tmp_placements;
+        best_bss = tmp_bss;
+    }
 
+    best_placements.extend(put_tree_around_no_tree(&mut best_bss, &confirmed, ti, tj));
     let mut iteration = 0;
     let mut empty_placements = HashSet::new();
-    let mut best_bss = tmp_bss.clone();
-    let mut best_placements = tmp_placements.clone();
-    let mut best_score = simulate(&best_bss, pi, pj, (ti, tj), q.clone());
     for i in 0..bss.len() {
         for j in 0..bss.len() {
             if best_bss[i][j] == '.' && !confirmed.contains(&(i, j)) && !(i == ti && j == tj) {
@@ -311,7 +297,7 @@ fn solve(
     while start_time.elapsed() < std::time::Duration::from_millis(1900) {
         let mut new_bss = best_bss.clone();
         let mut new_placements = best_placements.clone();
-        let mut new_empty_placements: HashSet<(usize, usize)> = empty_placements.clone();
+        let mut new_empty_placements = empty_placements.clone();
 
         // 近傍操作: トレントを1つ追加/削除/移動
         let operation = rng.gen_range(0..2);
@@ -372,47 +358,7 @@ fn solve(
         iteration += 1;
     }
     eprintln!("iteration: {}, {:?}", iteration, start_time.elapsed());
-    // delete_three_tree(&mut best_bss, &mut best_placements, (ti, tj));
-
-    let mut set = HashSet::new();
-    if tj > 0 && ti > 0 && tj < n - 1 && ti < n - 1 {
-        if best_bss[ti - 1][tj - 1] == 'T' && bss[ti - 1][tj - 1] == '.' {
-            best_placements.retain(|(x, y)| *x != ti - 1 || *y != tj - 1);
-            best_bss[ti - 1][tj - 1] = '.';
-            let mut tmp_ti = ti - 1;
-            while best_bss[tmp_ti][tj - 1] == '.' {
-                set.insert((tmp_ti, tj - 1));
-                if tmp_ti == 0 {
-                    break;
-                }
-                tmp_ti -= 1;
-            }
-            let mut tmp_tj = tj - 1;
-            while best_bss[ti - 1][tmp_tj] == '.' {
-                set.insert((ti - 1, tmp_tj));
-                if tmp_tj == 0 {
-                    break;
-                }
-                tmp_tj -= 1;
-            }
-
-            let mut tmp_ti = ti + 1;
-            while tmp_ti < n && best_bss[tmp_ti][tj - 1] == '.' {
-                set.insert((tmp_ti, tj - 1));
-                tmp_ti += 1;
-            }
-            let mut tmp_tj = tj - 1;
-            while best_bss[ti + 1][tmp_tj] == '.' {
-                set.insert((ti + 1, tmp_tj));
-                if tmp_tj == 0 {
-                    break;
-                }
-                tmp_tj -= 1;
-            }
-        }
-    }
-
-    (best_placements, best_bss, set)
+    best_placements
 }
 
 pub struct Sim {
@@ -576,30 +522,6 @@ fn simulate(
     }
 }
 
-fn put_tree(
-    bss: &Vec<Vec<char>>,
-    confirmed: &HashSet<(usize, usize)>,
-    p: (usize, usize),
-    goal: (usize, usize),
-    targets: Vec<(usize, usize)>,
-) -> Vec<(usize, usize)> {
-    let mut placements = Vec::new();
-    for target in targets {
-        let (ti, tj) = target;
-        if confirmed.contains(&(ti, tj)) {
-            return placements;
-        }
-        let mut tmp_bss = bss.clone();
-        if bss[ti][tj] == '.' {
-            tmp_bss[ti][tj] = 'T';
-            if can_reach_goals(&tmp_bss, p.0, p.1, &[(goal.0, goal.1)]) {
-                placements.push((ti, tj));
-                return placements;
-            }
-        }
-    }
-    placements
-}
 fn main() {
     use std::io::{self, BufRead, Write};
     let start_time = std::time::Instant::now();
@@ -623,7 +545,6 @@ fn main() {
     }
 
     let mut turn = 0;
-    let mut set = HashSet::new();
     loop {
         let line = lines.next().unwrap().unwrap();
         let mut parts = line.trim().split_whitespace();
@@ -641,43 +562,12 @@ fn main() {
             confirmed.insert((x, y));
         }
 
+        // Check if adventurer reached the flower
         if pi == ti && pj == tj {
             break;
         }
-        if set.contains(&(pi, pj)) {
-            let placements = if pi < ti {
-                put_tree(
-                    &bss,
-                    &confirmed,
-                    (pi, pj),
-                    (ti, tj),
-                    vec![(ti - 1, tj - 1), (ti + 1, tj - 1)],
-                )
-            } else {
-                put_tree(
-                    &bss,
-                    &confirmed,
-                    (pi, pj),
-                    (ti, tj),
-                    vec![(ti + 1, tj - 1), (ti - 1, tj - 1)],
-                )
-            };
-            print!("{}", placements.len());
-            for (x, y) in placements {
-                print!(" {} {}", x, y);
-            }
-            println!();
-            io::stdout().flush().unwrap();
-            turn += 1;
-            set = HashSet::new();
-            continue;
-        }
-
         if turn == 0 {
-            let (best_placements, best_bss, tmp_set) =
-                solve(start_time, &bss, &confirmed, pi, pj, ti, tj);
-            set = tmp_set;
-            bss = best_bss;
+            let best_placements = solve(start_time, &bss, &confirmed, pi, pj, ti, tj);
             print!("{}", best_placements.len());
             for (x, y) in best_placements {
                 print!(" {} {}", x, y);
