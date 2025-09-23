@@ -12,6 +12,19 @@ const ARROUND: [(usize, usize); 8] = [
     (1, 1),
 ];
 // 上下左右に木があるかどうか
+fn exist_dij_tree(bss: &Vec<Vec<char>>, ti: usize, tj: usize) -> bool {
+    for (di, dj) in DIJ {
+        let ni = ti + di;
+        let nj = tj + dj;
+        if ni < bss.len() && nj < bss[0].len() {
+            if bss[ni][nj] == 'T' {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn exist_around_tree(bss: &Vec<Vec<char>>, ti: usize, tj: usize) -> bool {
     for (di, dj) in ARROUND {
         let ni = ti + di;
@@ -31,22 +44,19 @@ fn put_diagonal(
     ti: usize,
     tj: usize,
     direction: i64,
+    t: (usize, usize),
 ) -> Vec<(usize, usize)> {
     let original_bss = bss.clone();
     let n = bss.len() as i64;
     let mut treant_placements = Vec::new();
     let mut tmp_ti = ti as i64;
     let mut tmp_tj = tj as i64;
-    while tmp_ti < n - 1 && tmp_tj < n - 1 && tmp_ti >= 0 && tmp_tj >= 0 {
+    while tmp_ti < n && tmp_tj < n && tmp_ti >= 0 && tmp_tj >= 0 {
         if bss[tmp_ti as usize][tmp_tj as usize] == '.'
             && !confirmed.contains(&(tmp_ti as usize, tmp_tj as usize))
-            && !exist_around_tree(&original_bss, tmp_ti as usize, tmp_tj as usize)
+            && !exist_dij_tree(&original_bss, tmp_ti as usize, tmp_tj as usize)
+            && (tmp_ti as usize, tmp_tj as usize) != t
         {
-            if (tmp_ti == n - 2 || tmp_tj == n - 2)
-                && bss[(tmp_ti + direction) as usize][(tmp_tj + direction) as usize] == 'T'
-            {
-                return treant_placements;
-            }
             bss[tmp_ti as usize][tmp_tj as usize] = 'T';
             treant_placements.push((tmp_ti as usize, tmp_tj as usize));
         }
@@ -155,18 +165,56 @@ fn surround_flower(
 
     return best_treant_placements;
 }
-
+fn not_around_goal(p: (usize, usize), t: (usize, usize)) -> bool {
+    for (di, dj) in DIJ {
+        let ni = t.0 + di;
+        let nj = t.1 + dj;
+        if ni == p.0 && nj == p.1 {
+            return false;
+        }
+    }
+    true
+}
+fn delete_three_tree(
+    bss: &mut Vec<Vec<char>>,
+    placements: &mut Vec<(usize, usize)>,
+    t: (usize, usize),
+) {
+    let n = bss.len();
+    for i in 0..n {
+        for j in 0..n - 2 {
+            if bss[i][j] == 'T'
+                && bss[i][j + 1] == 'T'
+                && bss[i][j + 2] == 'T'
+                && not_around_goal((i, j + 1), t)
+                && placements.contains(&(i, j + 1))
+            {
+                bss[i][j + 1] = '.';
+                placements.retain(|(x, y)| *x != i || *y != j + 1);
+            }
+        }
+    }
+}
 fn init_tree(
     bss: &mut Vec<Vec<char>>,
     confirmed: &HashSet<(usize, usize)>,
     start_pos: usize,
     direction: i64,
+    t: (usize, usize),
 ) -> Vec<(usize, usize)> {
     let n = bss.len();
+    let (ti, tj) = t;
     let mut treant_placements = Vec::new();
     // 3つ飛ばしで斜めに線を引く
     for i in (0..n).step_by(3) {
-        treant_placements.extend(put_diagonal(bss, &confirmed, 0, i + start_pos, direction));
+        treant_placements.extend(put_diagonal(
+            bss,
+            &confirmed,
+            0,
+            i + start_pos,
+            direction,
+            t,
+        ));
     }
     for i in (0..n).step_by(3) {
         treant_placements.extend(put_diagonal(
@@ -175,12 +223,12 @@ fn init_tree(
             i + 3 - start_pos,
             0,
             direction,
+            t,
         ));
     }
 
     treant_placements
 }
-
 fn solve(
     start_time: std::time::Instant,
     bss: &Vec<Vec<char>>,
@@ -205,86 +253,101 @@ fn solve(
         }
     }
     q.shuffle(&mut rng);
-    let surround_placements: Vec<Vec<(i64, i64)>> = if tj >= n / 2 {
-        vec![
-            vec![(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)], // 横右下
-            vec![(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)], // 縦右下
-            vec![(-1, 0), (0, 1), (1, 0), (-1, -1), (0, -2)], // 横左下
-            vec![(0, -1), (-1, 0), (0, 1), (1, 1), (2, 0)],  // 縦左下
-            vec![(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)], // 縦右上
-            vec![(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],  // 横右上
-            vec![(-1, 0), (0, 1), (1, 0), (1, -1), (0, -2)], // 横左上
-            vec![(0, 1), (1, 0), (0, -1), (-1, -1), (-2, 0)], // 縦左上
-        ]
-    } else {
-        vec![
-            vec![(-1, 0), (0, 1), (1, 0), (-1, -1), (0, -2)], // 横左下
-            vec![(0, -1), (-1, 0), (0, 1), (1, 1), (2, 0)],   // 縦左下
-            vec![(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)],  // 横右下
-            vec![(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)],  // 縦右下
-            vec![(-1, 0), (0, 1), (1, 0), (1, -1), (0, -2)],  // 横左上
-            vec![(0, 1), (1, 0), (0, -1), (-1, -1), (-2, 0)], // 縦左上
-            vec![(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)],  // 縦右上
-            vec![(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],   // 横右上
-        ]
-    };
 
-    let mut best_bss: Vec<Vec<char>> = bss.clone();
-    let mut best_placements: Vec<(usize, usize)> = Vec::new();
+    let mut best_placements = Vec::new();
     let mut best_score = 0;
-
-    let ti_mod = 3;
-    let tj_mod: usize = 5;
-    let mut tmp_bss: Vec<Vec<char>> = bss.clone();
-    let mut must_reach: Vec<(usize, usize)> = vec![(ti, tj)];
-    let mut tmp_ti = (ti + ((n - 1 - ti) / ti_mod) * ti_mod) as i64;
-    while tmp_ti >= 0 {
-        let mut tmp_tj = tj % tj_mod;
-        while tmp_tj < n {
-            if bss[tmp_ti as usize][tmp_tj] == '.' {
-                must_reach.push((tmp_ti as usize, tmp_tj));
+    let mut best_bss: Vec<Vec<char>> = bss.clone();
+    for i in 0..3 {
+        let mut tmp_bss: Vec<Vec<char>> = bss.clone();
+        let surround_candidates: Vec<Vec<(i64, i64)>> = if tj >= n / 2 {
+            vec![
+                vec![(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)], // 横右下
+                vec![(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)], // 縦右下
+                vec![(-1, 0), (0, 1), (1, 0), (-1, -1), (0, -2)], // 横左下
+                vec![(0, -1), (-1, 0), (0, 1), (1, 1), (2, 0)],  // 縦左下
+                vec![(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)], // 縦右上
+                vec![(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],  // 横右上
+                vec![(-1, 0), (0, 1), (1, 0), (1, -1), (0, -2)], // 横左上
+                vec![(0, 1), (1, 0), (0, -1), (-1, -1), (-2, 0)], // 縦左上
+            ]
+        } else {
+            vec![
+                vec![(-1, 0), (0, 1), (1, 0), (-1, -1), (0, -2)], // 横左下
+                vec![(0, -1), (-1, 0), (0, 1), (1, 1), (2, 0)],   // 縦左下
+                vec![(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)],  // 横右下
+                vec![(0, -1), (-1, 0), (0, 1), (1, -1), (2, 0)],  // 縦右下
+                vec![(-1, 0), (0, 1), (1, 0), (1, -1), (0, -2)],  // 横左上
+                vec![(0, 1), (1, 0), (0, -1), (-1, -1), (-2, 0)], // 縦左上
+                vec![(0, 1), (1, 0), (0, -1), (-1, 1), (-2, 0)],  // 縦右上
+                vec![(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],   // 横右上
+            ]
+        };
+        let surround_placements = surround_flower(
+            &mut tmp_bss,
+            &confirmed,
+            (ti, tj),
+            &vec![(ti, tj)],
+            &surround_candidates,
+        );
+        let surround_sets = surround_placements
+            .iter()
+            .cloned()
+            .collect::<HashSet<(usize, usize)>>();
+        let mut treant_placements = init_tree(&mut tmp_bss, &confirmed, i, 1, (ti, tj));
+        treant_placements.extend(surround_placements);
+        let mut uf = UnionFind::new(n * n);
+        for i in 0..n - 1 {
+            for j in 0..n - 1 {
+                if tmp_bss[i][j] == '.' {
+                    if tmp_bss[i + 1][j] == '.' {
+                        uf.union(i * n + j, (i + 1) * n + j);
+                    }
+                    if tmp_bss[i][j + 1] == '.' {
+                        uf.union(i * n + j, i * n + j + 1);
+                    }
+                }
             }
-            tmp_tj += tj_mod;
         }
-        tmp_ti -= ti_mod as i64;
-    }
-    let mut tmp_placements = surround_flower(
-        &mut tmp_bss,
-        &confirmed,
-        (ti, tj),
-        &must_reach,
-        &surround_placements,
-    );
-    let mut tmp_ti = (ti + ((n - 1 - ti) / ti_mod) * ti_mod) as i64;
-    while tmp_ti >= 0 {
-        let mut tmp_tj = tj % tj_mod;
-        while tmp_tj < n {
-            if tmp_tj == tj && (tmp_ti == (ti + ti_mod) as i64 || tmp_ti == (ti - ti_mod) as i64) {
-                tmp_tj += tj_mod;
-                continue;
+        let mut sets = treant_placements
+            .iter()
+            .cloned()
+            .collect::<HashSet<(usize, usize)>>();
+        for i in 0..n {
+            for j in 0..n {
+                if !sets.contains(&(i, j)) || surround_sets.contains(&(i, j)) {
+                    continue;
+                }
+                if (i > 0
+                    && i < n - 1
+                    && !uf.is_same((i + 1) * n + j, (i - 1) * n + j)
+                    && uf.get_size((i + 1) * n + j) > 1
+                    && uf.get_size((i - 1) * n + j) > 1)
+                    || (j > 0
+                        && j < n - 1
+                        && !uf.is_same(i * n + j + 1, i * n + j - 1)
+                        && uf.get_size(i * n + j + 1) > 1
+                        && uf.get_size(i * n + j - 1) > 1)
+                {
+                    if i > 0 && i < n - 1 {
+                        uf.union((i + 1) * n + j, (i - 1) * n + j);
+                    }
+                    if j > 0 && j < n - 1 {
+                        uf.union(i * n + j + 1, i * n + j - 1);
+                    }
+                    tmp_bss[i][j] = '.';
+                    sets.remove(&(i, j));
+                }
             }
-            if bss[tmp_ti as usize][tmp_tj] == '.' {
-                let placements = surround_flower(
-                    &mut tmp_bss,
-                    &confirmed,
-                    (tmp_ti as usize, tmp_tj),
-                    &must_reach,
-                    &surround_placements,
-                );
-                tmp_placements.extend(placements);
-            }
-            tmp_tj += tj_mod;
         }
-        tmp_ti -= ti_mod as i64;
-    }
-    let score = simulate(&tmp_bss, pi, pj, (ti, tj), q.clone());
-    if score > best_score {
-        best_score = score;
-        best_placements = tmp_placements;
-        best_bss = tmp_bss;
+        let score = simulate(&tmp_bss, pi, pj, (ti, tj), q.clone());
+        if score > best_score {
+            best_score = score;
+            best_placements = sets.iter().cloned().collect();
+            best_bss = tmp_bss;
+        }
     }
 
-    best_placements.extend(put_tree_around_no_tree(&mut best_bss, &confirmed, ti, tj));
+    // 以下時間まで焼きなまし
     let mut iteration = 0;
     let mut empty_placements = HashSet::new();
     for i in 0..bss.len() {
@@ -297,7 +360,7 @@ fn solve(
     while start_time.elapsed() < std::time::Duration::from_millis(1900) {
         let mut new_bss = best_bss.clone();
         let mut new_placements = best_placements.clone();
-        let mut new_empty_placements = empty_placements.clone();
+        let mut new_empty_placements: HashSet<(usize, usize)> = empty_placements.clone();
 
         // 近傍操作: トレントを1つ追加/削除/移動
         let operation = rng.gen_range(0..2);
@@ -357,7 +420,7 @@ fn solve(
         }
         iteration += 1;
     }
-    eprintln!("iteration: {}, {:?}", iteration, start_time.elapsed());
+    eprintln!("iteration: {}", iteration);
     best_placements
 }
 
@@ -609,5 +672,78 @@ where
             *self = v;
             true
         }
+    }
+}
+#[derive(Clone)]
+pub struct UnionFind {
+    parent: Vec<usize>,
+    rank: Vec<usize>,
+    size: Vec<usize>,
+}
+
+impl UnionFind {
+    /// 新しいUnion-Find構造を作成
+    /// n: 要素数
+    pub fn new(n: usize) -> Self {
+        UnionFind {
+            parent: (0..n).collect(),
+            rank: vec![0; n],
+            size: vec![1; n],
+        }
+    }
+
+    /// 要素xが属する集合の代表元を探索（経路圧縮付き）
+    pub fn find(&mut self, x: usize) -> usize {
+        if self.parent[x] != x {
+            self.parent[x] = self.find(self.parent[x]);
+        }
+        self.parent[x]
+    }
+
+    /// 要素xとyが属する集合を併合
+    /// 返り値: 併合が行われたらtrue、既に同じ集合ならfalse
+    pub fn union(&mut self, x: usize, y: usize) -> bool {
+        let root_x = self.find(x);
+        let root_y = self.find(y);
+
+        if root_x == root_y {
+            return false;
+        }
+
+        // ランクによる併合（低い木を高い木にマージ）
+        match self.rank[root_x].cmp(&self.rank[root_y]) {
+            std::cmp::Ordering::Less => {
+                self.parent[root_x] = root_y;
+                self.size[root_y] += self.size[root_x];
+            }
+            std::cmp::Ordering::Greater => {
+                self.parent[root_y] = root_x;
+                self.size[root_x] += self.size[root_y];
+            }
+            std::cmp::Ordering::Equal => {
+                self.parent[root_y] = root_x;
+                self.rank[root_x] += 1;
+                self.size[root_x] += self.size[root_y];
+            }
+        }
+        true
+    }
+
+    /// 要素xとyが同じ集合に属しているか判定
+    pub fn is_same(&mut self, x: usize, y: usize) -> bool {
+        self.find(x) == self.find(y)
+    }
+
+    /// 要素xが属する集合のサイズを返す
+    pub fn get_size(&mut self, x: usize) -> usize {
+        let root = self.find(x);
+        self.size[root]
+    }
+
+    /// 連結成分の数を返す
+    pub fn count_groups(&mut self) -> usize {
+        (0..self.parent.len())
+            .filter(|&i| self.find(i) == i)
+            .count()
     }
 }

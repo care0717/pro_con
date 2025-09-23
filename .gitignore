@@ -11,3 +11,4 @@ target
 *.svg
 *.png
 cache
+*.log
