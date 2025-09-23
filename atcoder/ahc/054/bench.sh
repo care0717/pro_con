@@ -20,7 +20,7 @@ if [ $? -ne 0 ]; then
 fi
 
 
-for i in $(seq -f "%04g" 0 70); do
+for i in $(seq -f "%04g" 0 100); do
     input_file="in/${i}.txt"
     output_file="out_${i}.txt"
     
