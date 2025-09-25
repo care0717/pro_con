@@ -76,6 +76,21 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         .target { border: 3px solid #FF0000 !important; box-sizing: border-box; }
         .info { margin-top: 20px; padding: 10px; background-color: #f0f0f0; }
         .treant { background-color: #228B22; color: white; cursor: pointer; }
+        .editor-mode .cell:not(.tree):not(.flower) { cursor: pointer; }
+        .editor-mode .cell:not(.tree):not(.flower):hover { background-color: #B0E0E6 !important; }
+        .placed-tree { background-color: #228B22; color: white; }
+        .output-display { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background-color: #f8f9fa; 
+            border: 2px solid #dee2e6; 
+            border-radius: 5px; 
+            font-family: monospace; 
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .output-display h3 { margin-top: 0; color: #495057; }
     </style>
     "#,
     );
@@ -95,6 +110,10 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         <input type="range" id="stepSlider" min="0" max="0" value="0" style="width: 300px;">
         <span id="stepSliderValue">0</span>
     </div>
+    <div class="controls">
+        <button onclick="toggleEditorMode()" id="editorModeBtn">Switch to Editor Mode</button>
+        <button onclick="clearPlacedTrees()" id="clearTreesBtn" style="display: none;">Clear All Trees</button>
+    </div>
     "#,
     );
 
@@ -112,6 +131,12 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         <div><strong>🌳 Treants Placed:</strong> <span id="treantCount">0</span></div>
         <div><strong>🗑️ Removed Treants:</strong> <span id="removedTreants">None</span></div>
         <button onclick="clearRemovedTreants()" style="margin-top: 5px; padding: 5px 10px;">Clear Removed Treants</button>
+    </div>
+    
+    <!-- Editor Mode Output Display -->
+    <div class="output-display" id="outputDisplay" style="display: none;">
+        <h3>Output Format (Space-separated):</h3>
+        <div id="outputContent">m x₀ y₀ ... x_{m-1} y_{m-1}</div>
     </div>
     "#,
     );
@@ -137,6 +162,8 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         
         let currentStep = 0;
         let animationInterval = null;
+        let editorMode = false;
+        let placedTrees = [];
         
         function initGrid() {{
             const grid = document.getElementById('grid');
@@ -190,6 +217,14 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
                     const cell = document.getElementById(`cell-${{i}}-${{j}}`);
                     cell.className = cell.className.replace(/ adventurer| confirmed| target| treant/g, '');
                     // Don't clear click events - they will be re-added for treants
+                    // But clear editor mode click events
+                    if (editorMode && !cell.className.includes('tree') && !cell.className.includes('flower')) {{
+                        cell.onclick = function(e) {{
+                            e.preventDefault();
+                            e.stopPropagation();
+                            placeTree(i, j);
+                        }};
+                    }}
                     // Reset text content to original state
                     if (input.b[i][j] === 'T') {{
                         cell.textContent = 'T';
@@ -246,13 +281,15 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
                         if (cell && !cell.className.includes('adventurer')) {{
                             cell.className += ' treant';
                             cell.textContent = 'T';
-                            // Add click event to remove treant
-                            cell.onclick = function(e) {{
-                                e.preventDefault();
-                                e.stopPropagation();
-                                removeTreant(pos[0], pos[1]);
-                            }};
-                            cell.style.cursor = 'pointer';
+                            // Add click event to remove treant (only if not in editor mode)
+                            if (!editorMode) {{
+                                cell.onclick = function(e) {{
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    removeTreant(pos[0], pos[1]);
+                                }};
+                                cell.style.cursor = 'pointer';
+                            }}
                         }}
                     }}
                 }});
@@ -650,6 +687,127 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
             alert('Removed treants cleared!');
         }}
         
+        function toggleEditorMode() {{
+            editorMode = !editorMode;
+            const grid = document.getElementById('grid');
+            const editorBtn = document.getElementById('editorModeBtn');
+            const clearBtn = document.getElementById('clearTreesBtn');
+            const outputDisplay = document.getElementById('outputDisplay');
+            const info = document.getElementById('info');
+            
+            if (editorMode) {{
+                grid.classList.add('editor-mode');
+                editorBtn.textContent = 'Switch to Visualization Mode';
+                clearBtn.style.display = 'inline-block';
+                outputDisplay.style.display = 'block';
+                info.style.display = 'none';
+                
+                // Add click handlers to empty cells
+                for (let i = 0; i < input.N; i++) {{
+                    for (let j = 0; j < input.N; j++) {{
+                        const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+                        if (!cell.classList.contains('tree') && !cell.classList.contains('flower')) {{
+                            cell.onclick = function(e) {{
+                                e.preventDefault();
+                                e.stopPropagation();
+                                placeTree(i, j);
+                            }};
+                        }}
+                    }}
+                }}
+                
+                updateOutputDisplay();
+            }} else {{
+                grid.classList.remove('editor-mode');
+                editorBtn.textContent = 'Switch to Editor Mode';
+                clearBtn.style.display = 'none';
+                outputDisplay.style.display = 'none';
+                info.style.display = 'block';
+                
+                // Remove click handlers
+                for (let i = 0; i < input.N; i++) {{
+                    for (let j = 0; j < input.N; j++) {{
+                        const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+                        cell.onclick = null;
+                    }}
+                }}
+                
+                // Reset to visualization mode
+                if (simulationSteps && simulationSteps.length > 0) {{
+                    updateStep(currentStep);
+                }}
+            }}
+        }}
+        
+        function placeTree(i, j) {{
+            // Check if position is already occupied
+            if (input.b[i][j] === 'T' || (i === input.t[0] && j === input.t[1])) {{
+                return; // Cannot place on existing tree or flower
+            }}
+            
+            // Check if already placed
+            if (placedTrees.some(([pi, pj]) => pi === i && pj === j)) {{
+                return;
+            }}
+            
+            placedTrees.push([i, j]);
+            
+            const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+            cell.classList.add('placed-tree');
+            cell.textContent = 'T';
+            cell.onclick = function(e) {{
+                e.preventDefault();
+                e.stopPropagation();
+                removePlacedTree(i, j);
+            }};
+            
+            updateOutputDisplay();
+        }}
+        
+        function removePlacedTree(i, j) {{
+            placedTrees = placedTrees.filter(([pi, pj]) => !(pi === i && pj === j));
+            
+            const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+            cell.classList.remove('placed-tree');
+            cell.textContent = '.';
+            cell.onclick = function(e) {{
+                e.preventDefault();
+                e.stopPropagation();
+                placeTree(i, j);
+            }};
+            
+            updateOutputDisplay();
+        }}
+        
+        function clearPlacedTrees() {{
+            placedTrees.forEach(([i, j]) => {{
+                const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+                cell.classList.remove('placed-tree');
+                cell.textContent = '.';
+                cell.onclick = function(e) {{
+                    e.preventDefault();
+                    e.stopPropagation();
+                    placeTree(i, j);
+                }};
+            }});
+            
+            placedTrees = [];
+            updateOutputDisplay();
+        }}
+        
+        function updateOutputDisplay() {{
+            const outputContent = document.getElementById('outputContent');
+            if (placedTrees.length === 0) {{
+                outputContent.textContent = 'm\\nx₀ y₀ ... x_{{m-1}} y_{{m-1}}';
+            }} else {{
+                let output = placedTrees.length.toString();
+                placedTrees.forEach(([i, j]) => {{
+                    output += ' ' + i + ' ' + j;
+                }});
+                outputContent.textContent = output;
+            }}
+        }}
+        
         // Initialize slider
         function initSlider() {{
             const slider = document.getElementById('stepSlider');
@@ -681,6 +839,9 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         }} else {{
             document.getElementById('stepInfo').textContent = 'No steps available';
         }}
+        
+        // Initialize editor mode output display
+        updateOutputDisplay();
     </script>
     "#, input.N, input.t.0, input.t.1, input_b_json, simulation_steps_json));
 
