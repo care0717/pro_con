@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashSet, VecDeque},
-    hash::Hash,
-};
+use std::collections::{HashSet, VecDeque};
 
 const DIJ: [(usize, usize); 4] = [(!0, 0), (1, 0), (0, !0), (0, 1)];
 const ARROUND: [(usize, usize); 8] = [
@@ -171,25 +168,26 @@ fn put_diagonal(
     confirmed: &HashSet<(usize, usize)>,
     ti: usize,
     tj: usize,
-    direction: i64,
+    direction: usize,
     t: (usize, usize),
 ) -> HashSet<(usize, usize)> {
     let original_bss = bss.clone();
-    let n = bss.len() as i64;
+    let n = bss.len();
     let mut treant_placements = HashSet::new();
-    let mut tmp_ti = ti as i64;
-    let mut tmp_tj = tj as i64;
-    while tmp_ti < n && tmp_tj < n && tmp_ti >= 0 && tmp_tj >= 0 {
-        if bss[tmp_ti as usize][tmp_tj as usize] == '.'
-            && !confirmed.contains(&(tmp_ti as usize, tmp_tj as usize))
-            && !exist_dij_tree(&original_bss, tmp_ti as usize, tmp_tj as usize)
-            && (tmp_ti as usize, tmp_tj as usize) != t
+    let mut tmp_ti = ti;
+
+    let mut tmp_tj = if direction == 1 { tj } else { n - 1 - tj };
+    while tmp_ti < n && tmp_tj < n {
+        if bss[tmp_ti][tmp_tj] == '.'
+            && !confirmed.contains(&(tmp_ti, tmp_tj))
+            && !exist_dij_tree(&original_bss, tmp_ti, tmp_tj)
+            && (tmp_ti, tmp_tj) != t
         {
-            bss[tmp_ti as usize][tmp_tj as usize] = 'T';
-            treant_placements.insert((tmp_ti as usize, tmp_tj as usize));
+            bss[tmp_ti][tmp_tj] = 'T';
+            treant_placements.insert((tmp_ti, tmp_tj));
         }
-        tmp_ti += direction;
-        tmp_tj += 1;
+        tmp_ti += 1;
+        tmp_tj += direction;
     }
 
     treant_placements
@@ -327,7 +325,7 @@ fn init_tree(
     bss: &mut Vec<Vec<char>>,
     confirmed: &HashSet<(usize, usize)>,
     start_pos: usize,
-    direction: i64,
+    direction: usize,
     t: (usize, usize),
 ) -> HashSet<(usize, usize)> {
     let n = bss.len();
@@ -416,9 +414,10 @@ fn solve(
     let mut best_placements = HashSet::new();
     let mut best_score = 0;
     let mut best_bss: Vec<Vec<char>> = bss.clone();
-    for i in 0..3 {
+    for i in 0..6 {
         let mut tmp_bss = surround_bss.clone();
-        let mut treant_placements = init_tree(&mut tmp_bss, &confirmed, i, 1, (ti, tj));
+        let direction = if i < 3 { 1 } else { !0 };
+        let mut treant_placements = init_tree(&mut tmp_bss, &confirmed, i, direction, (ti, tj));
         treant_placements.extend(surround_placements.clone());
         let mut uf = UnionFind::new(n * n);
         for i in 0..n - 1 {
