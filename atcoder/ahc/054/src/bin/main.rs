@@ -1,6 +1,7 @@
-use std::collections::{HashSet, VecDeque};
-
-use pathfinding::matrix::directions::W;
+use std::{
+    collections::{HashSet, VecDeque},
+    hash::Hash,
+};
 
 const DIJ: [(usize, usize); 4] = [(!0, 0), (1, 0), (0, !0), (0, 1)];
 const ARROUND: [(usize, usize); 8] = [
@@ -25,6 +26,131 @@ fn exist_dij_tree(bss: &Vec<Vec<char>>, ti: usize, tj: usize) -> bool {
         }
     }
     false
+}
+
+fn select_next_place(
+    n: usize,
+    confirmed: &HashSet<(usize, usize)>,
+    p: (usize, usize),
+    t: (usize, usize),
+    will_place: &mut HashSet<(usize, usize)>,
+    already_placed: &HashSet<(usize, usize)>,
+    before_place: Option<(usize, usize)>,
+    empty_arround_flower: &HashSet<(usize, usize)>,
+) -> Vec<(usize, usize)> {
+    if will_place.is_empty() {
+        return Vec::new();
+    }
+
+    let (pi, pj) = p;
+    let mut next_place = Vec::new();
+    // 前回の移動方向から、今回スキャンする方向を決定
+    let (scan_vertical, scan_horizontal) = match before_place {
+        Some((prev_i, _)) if prev_i == pi => (true, false), // 横移動してきた→縦スキャン
+        Some(_) => (false, true),                           // 縦移動してきた→横スキャン
+        None => (true, true),                               // 初回→全方向スキャン
+    };
+
+    // 共通のスキャン処理
+    let mut scan_line = |positions: Vec<(usize, usize)>| {
+        for pos in positions {
+            if already_placed.contains(&pos) {
+                break;
+            }
+            if !confirmed.contains(&pos) {
+                if will_place.contains(&pos) {
+                    will_place.remove(&pos);
+                    next_place.push(pos);
+                    break;
+                }
+            }
+        }
+    };
+    // 縦方向スキャン
+    if scan_vertical {
+        scan_line((pi..n).map(|i| (i, pj)).collect());
+        scan_line((0..pi).rev().map(|i| (i, pj)).collect());
+    }
+
+    // 横方向スキャン
+    if scan_horizontal {
+        scan_line((pj..n).map(|j| (pi, j)).collect());
+        scan_line((0..pj).rev().map(|j| (pi, j)).collect());
+    }
+    next_place
+}
+
+fn make_empty_arround_flower(
+    n: usize,
+    confirmed: &HashSet<(usize, usize)>,
+    already_placed: &HashSet<(usize, usize)>,
+    will_place: &HashSet<(usize, usize)>,
+    t: (usize, usize),
+) -> HashSet<(usize, usize)> {
+    let (ti, tj) = t;
+    let mut empty_arround_flower = HashSet::new();
+    for (di, dj) in ARROUND {
+        let mut iter = 0;
+        let mut ni = ti;
+        let mut nj = tj;
+        while ni < n && nj < n && iter < 1 {
+            if !confirmed.contains(&(ni, nj)) && !already_placed.contains(&(ni, nj))
+            // && !will_place.contains(&(ni, nj))
+            {
+                empty_arround_flower.insert((ni, nj));
+            } else {
+                break;
+            }
+            ni += di;
+            nj += dj;
+            iter += 1;
+        }
+    }
+    empty_arround_flower.remove(&(ti, tj));
+    empty_arround_flower
+}
+
+fn make_habitat_place(bss: &Vec<Vec<char>>, t: (usize, usize)) -> HashSet<(usize, usize)> {
+    let mut queue = VecDeque::new();
+    let mut habitat_place = HashSet::new();
+    let mut visited = HashSet::new();
+    visited.insert(t);
+    for (di, dj) in ARROUND {
+        let ni = t.0 + di;
+        let nj = t.1 + dj;
+        visited.insert((ni, nj));
+        if ni < bss.len() && nj < bss.len() && bss[ni][nj] == 'T' {
+            for (di, dj) in ARROUND {
+                let ni2 = ni + di;
+                let nj2 = nj + dj;
+                if ni2 < bss.len() && nj2 < bss.len() && bss[ni2][nj2] == '.' {
+                    habitat_place.insert((ni2, nj2));
+                }
+            }
+            queue.push_back((ni, nj));
+        }
+    }
+    while let Some((i, j)) = queue.pop_front() {
+        if visited.contains(&(i, j)) {
+            continue;
+        }
+        visited.insert((i, j));
+        for (di, dj) in ARROUND {
+            let ni = i + di;
+            let nj = j + dj;
+            if ni < bss.len() && nj < bss.len() && bss[ni][nj] == 'T' {
+                for (di, dj) in ARROUND {
+                    let ni2 = ni + di;
+                    let nj2 = nj + dj;
+                    if ni2 < bss.len() && nj2 < bss.len() && bss[ni2][nj2] == '.' {
+                        habitat_place.insert((ni2, nj2));
+                    }
+                }
+                queue.push_back((ni, nj));
+            }
+        }
+    }
+    habitat_place
 }
 
 fn exist_around_tree(bss: &Vec<Vec<char>>, ti: usize, tj: usize) -> bool {
@@ -75,8 +201,8 @@ fn put_tree_around_no_tree(
     confirmed: &HashSet<(usize, usize)>,
     ti: usize,
     tj: usize,
-) -> HashSet<(usize, usize)> {
-    let mut treant_placements = HashSet::new();
+) -> Vec<(usize, usize)> {
+    let mut treant_placements = Vec::new();
     for i in 0..bss.len() {
         for j in 0..bss.len() {
             if bss[i][j] == '.'
@@ -86,7 +212,7 @@ fn put_tree_around_no_tree(
                 && !exist_around_tree(bss, i, j)
             {
                 bss[i][j] = 'T';
-                treant_placements.insert((i, j));
+                treant_placements.push((i, j));
             }
         }
     }
@@ -165,7 +291,7 @@ fn surround_flower(
     }
     *bss = best_bss;
 
-    return best_treant_placements;
+    best_treant_placements
 }
 fn not_around_goal(p: (usize, usize), t: (usize, usize)) -> bool {
     for (di, dj) in DIJ {
@@ -179,7 +305,7 @@ fn not_around_goal(p: (usize, usize), t: (usize, usize)) -> bool {
 }
 fn delete_three_tree(
     bss: &mut Vec<Vec<char>>,
-    placements: &mut HashSet<(usize, usize)>,
+    placements: &mut Vec<(usize, usize)>,
     t: (usize, usize),
 ) {
     let n = bss.len();
@@ -192,70 +318,12 @@ fn delete_three_tree(
                 && placements.contains(&(i, j + 1))
             {
                 bss[i][j + 1] = '.';
-                placements.remove(&(i, j + 1));
+                placements.retain(|(x, y)| *x != i || *y != j + 1);
             }
         }
     }
 }
-
-fn new_uf(n: usize, treant_placements: &HashSet<(usize, usize)>) -> UnionFind {
-    let mut uf = UnionFind::new(n * n);
-    for i in 0..n - 1 {
-        for j in 0..n - 1 {
-            if !treant_placements.contains(&(i, j)) {
-                if !treant_placements.contains(&((i + 1), j)) {
-                    uf.union(i * n + j, (i + 1) * n + j);
-                }
-                if !treant_placements.contains(&(i, j + 1)) {
-                    uf.union(i * n + j, i * n + j + 1);
-                }
-            }
-        }
-    }
-    let i = n - 1;
-    let j = n - 1;
-    if !treant_placements.contains(&(i, j)) {
-        if !treant_placements.contains(&((i - 1), j)) {
-            uf.union(i * n + j, (i - 1) * n + j);
-        }
-        if !treant_placements.contains(&(i, j - 1)) {
-            uf.union(i * n + j, i * n + j - 1);
-        }
-    }
-    uf
-}
-
-fn make_empty_arround_flower(
-    n: usize,
-    confirmed: &HashSet<(usize, usize)>,
-    already_placed: &HashSet<(usize, usize)>,
-    will_place: &HashSet<(usize, usize)>,
-    t: (usize, usize),
-) -> HashSet<(usize, usize)> {
-    let (ti, tj) = t;
-    let mut empty_arround_flower = HashSet::new();
-    for (di, dj) in ARROUND {
-        let mut iter = 0;
-        let mut ni = ti;
-        let mut nj = tj;
-        while ni < n && nj < n && iter < 1 {
-            if !confirmed.contains(&(ni, nj)) && !already_placed.contains(&(ni, nj))
-            // && !will_place.contains(&(ni, nj))
-            {
-                empty_arround_flower.insert((ni, nj));
-            } else {
-                break;
-            }
-            ni += di;
-            nj += dj;
-            iter += 1;
-        }
-    }
-    empty_arround_flower.remove(&(ti, tj));
-    empty_arround_flower
-}
-
-fn put_all_diagonal(
+fn init_tree(
     bss: &mut Vec<Vec<char>>,
     confirmed: &HashSet<(usize, usize)>,
     start_pos: usize,
@@ -263,6 +331,7 @@ fn put_all_diagonal(
     t: (usize, usize),
 ) -> HashSet<(usize, usize)> {
     let n = bss.len();
+    let (ti, tj) = t;
     let mut treant_placements = HashSet::new();
     // 3つ飛ばしで斜めに線を引く
     for i in (0..n).step_by(3) {
@@ -288,51 +357,7 @@ fn put_all_diagonal(
 
     treant_placements
 }
-
-fn make_habitat_place(bss: &Vec<Vec<char>>, t: (usize, usize)) -> HashSet<(usize, usize)> {
-    let mut queue = VecDeque::new();
-    let mut habitat_place = HashSet::new();
-    let mut visited = HashSet::new();
-    visited.insert(t);
-    for (di, dj) in ARROUND {
-        let ni = t.0 + di;
-        let nj = t.1 + dj;
-        visited.insert((ni, nj));
-        if ni < bss.len() && nj < bss.len() && bss[ni][nj] == 'T' {
-            for (di, dj) in ARROUND {
-                let ni2 = ni + di;
-                let nj2 = nj + dj;
-                if ni2 < bss.len() && nj2 < bss.len() && bss[ni2][nj2] == '.' {
-                    habitat_place.insert((ni2, nj2));
-                }
-            }
-            queue.push_back((ni, nj));
-        }
-    }
-    while let Some((i, j)) = queue.pop_front() {
-        if visited.contains(&(i, j)) {
-            continue;
-        }
-        visited.insert((i, j));
-        for (di, dj) in ARROUND {
-            let ni = i + di;
-            let nj = j + dj;
-            if ni < bss.len() && nj < bss.len() && bss[ni][nj] == 'T' {
-                for (di, dj) in ARROUND {
-                    let ni2 = ni + di;
-                    let nj2 = nj + dj;
-                    if ni2 < bss.len() && nj2 < bss.len() && bss[ni2][nj2] == '.' {
-                        habitat_place.insert((ni2, nj2));
-                    }
-                }
-                queue.push_back((ni, nj));
-            }
-        }
-    }
-    habitat_place
-}
-
-fn make_will_place(
+fn solve(
     start_time: std::time::Instant,
     bss: &Vec<Vec<char>>,
     confirmed: &HashSet<(usize, usize)>,
@@ -347,7 +372,6 @@ fn make_will_place(
     let mut q = Vec::new();
     let n = bss.len();
     let entrance = (0, n / 2);
-
     for i in 0..n {
         for j in 0..n {
             if (i, j) != entrance {
@@ -357,7 +381,6 @@ fn make_will_place(
     }
     q.shuffle(&mut rng);
 
-    let mut surround_bss = bss.clone();
     let surround_candidates: Vec<Vec<(i64, i64)>> = if tj >= n / 2 {
         vec![
             vec![(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)], // 横右下
@@ -381,6 +404,7 @@ fn make_will_place(
             vec![(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],   // 横右上
         ]
     };
+    let mut surround_bss: Vec<Vec<char>> = bss.clone();
     let surround_placements = surround_flower(
         &mut surround_bss,
         &confirmed,
@@ -388,15 +412,13 @@ fn make_will_place(
         &vec![(ti, tj)],
         &surround_candidates,
     );
-    let mut habitat_place = make_habitat_place(&surround_bss, (ti, tj));
-    habitat_place.extend(confirmed.clone());
 
     let mut best_placements = HashSet::new();
     let mut best_score = 0;
-    let mut best_bss: Vec<Vec<char>> = surround_bss.clone();
+    let mut best_bss: Vec<Vec<char>> = bss.clone();
     for i in 0..3 {
-        let mut tmp_bss: Vec<Vec<char>> = surround_bss.clone();
-        let mut treant_placements = put_all_diagonal(&mut tmp_bss, &habitat_place, i, 1, (ti, tj));
+        let mut tmp_bss = surround_bss.clone();
+        let mut treant_placements = init_tree(&mut tmp_bss, &confirmed, i, 1, (ti, tj));
         treant_placements.extend(surround_placements.clone());
         let mut uf = UnionFind::new(n * n);
         for i in 0..n - 1 {
@@ -446,238 +468,6 @@ fn make_will_place(
         }
     }
     best_placements
-}
-
-fn select_next_place2(
-    n: usize,
-    confirmed: &HashSet<(usize, usize)>,
-    p: (usize, usize),
-    t: (usize, usize),
-    will_place: &mut HashSet<(usize, usize)>,
-    already_placed: &HashSet<(usize, usize)>,
-    before_place: Option<(usize, usize)>,
-    empty_arround_flower: &mut HashSet<(usize, usize)>,
-) -> Vec<(usize, usize)> {
-    if will_place.is_empty() {
-        return Vec::new();
-    }
-    let (pi, pj) = p;
-    let (scan_vertical, scan_horizontal) = match before_place {
-        Some((prev_i, _)) if prev_i == pi => (true, false), // 横移動してきた→縦スキャン
-        Some(_) => (false, true),                           // 縦移動してきた→横スキャン
-        None => (true, true),                               // 初回→全方向スキャン
-    };
-    let mut next_place = HashSet::new();
-    let mut need_simulate = false;
-    let mut around_flower_placements = HashSet::new();
-    let mut scan_line = |positions: Vec<(usize, usize)>| {
-        for pos in positions {
-            if already_placed.contains(&pos) {
-                break;
-            }
-            if !confirmed.contains(&pos) {
-                if will_place.contains(&pos) {
-                    will_place.remove(&pos);
-                    next_place.insert(pos);
-                    break;
-                }
-                if empty_arround_flower.contains(&pos) {
-                    around_flower_placements.insert(pos);
-                    need_simulate = true;
-                    break;
-                }
-            }
-        }
-    };
-    if scan_vertical {
-        scan_line((pi..n).map(|i| (i, pj)).collect());
-        scan_line((0..pi).rev().map(|i| (i, pj)).collect());
-    }
-    if scan_horizontal {
-        scan_line((pj..n).map(|j| (pi, j)).collect());
-        scan_line((0..pj).rev().map(|j| (pi, j)).collect());
-    }
-    if need_simulate {
-        let mut treant_placements = already_placed.clone();
-        treant_placements.extend(will_place.clone());
-        treant_placements.extend(next_place.clone());
-        treant_placements.extend(around_flower_placements.clone());
-        let mut uf: UnionFind = new_uf(n, &treant_placements);
-        let mut will_place_update = false;
-        for &(i, j) in will_place.clone().iter() {
-            if i > 0
-                && i < n - 1
-                && (!treant_placements.contains(&((i + 1), j))
-                    && !uf.is_same((i + 1) * n + j, t.0 * n + t.1)
-                    || (!treant_placements.contains(&((i - 1), j))
-                        && !uf.is_same((i - 1) * n + j, t.0 * n + t.1)))
-                || (j > 0
-                    && j < n - 1
-                    && (!treant_placements.contains(&(i, j + 1))
-                        && !uf.is_same(i * n + j + 1, t.0 * n + t.1)
-                        || (!treant_placements.contains(&(i, j - 1))
-                            && !uf.is_same(i * n + j - 1, t.0 * n + t.1))))
-            {
-                if i > 0 && i < n - 1 {
-                    uf.union((i + 1) * n + j, (i - 1) * n + j);
-                }
-                if j > 0 && j < n - 1 {
-                    uf.union(i * n + j + 1, i * n + j - 1);
-                }
-                will_place.remove(&(i, j));
-                will_place_update = true;
-            }
-        }
-        if will_place_update {
-            *empty_arround_flower =
-                make_empty_arround_flower(n, &confirmed, &already_placed, &will_place, t);
-        }
-        if !uf.is_same(t.0 * n + t.1, pi * n + pj) {
-            around_flower_placements = HashSet::new();
-        }
-    }
-
-    next_place.extend(around_flower_placements);
-    next_place.into_iter().collect()
-}
-
-fn select_next_place(
-    n: usize,
-    confirmed: &HashSet<(usize, usize)>,
-    p: (usize, usize),
-    t: (usize, usize),
-    will_place: &mut HashSet<(usize, usize)>,
-    already_placed: &HashSet<(usize, usize)>,
-    before_place: Option<(usize, usize)>,
-    empty_arround_flower: &HashSet<(usize, usize)>,
-) -> Vec<(usize, usize)> {
-    if will_place.is_empty() {
-        return Vec::new();
-    }
-
-    let (pi, pj) = p;
-    let mut next_place = Vec::new();
-    // 前回の移動方向から、今回スキャンする方向を決定
-    let (scan_vertical, scan_horizontal) = match before_place {
-        Some((prev_i, _)) if prev_i == pi => (true, false), // 横移動してきた→縦スキャン
-        Some(_) => (false, true),                           // 縦移動してきた→横スキャン
-        None => (true, true),                               // 初回→全方向スキャン
-    };
-
-    // 共通のスキャン処理
-    let mut scan_line = |positions: Vec<(usize, usize)>| {
-        for pos in positions {
-            if already_placed.contains(&pos) {
-                break;
-            }
-            if !confirmed.contains(&pos) {
-                if will_place.contains(&pos) {
-                    will_place.remove(&pos);
-                    next_place.push(pos);
-                    break;
-                }
-            }
-        }
-    };
-    // 縦方向スキャン
-    if scan_vertical {
-        scan_line((pi..n).map(|i| (i, pj)).collect());
-        scan_line((0..pi).rev().map(|i| (i, pj)).collect());
-    }
-
-    // 横方向スキャン
-    if scan_horizontal {
-        scan_line((pj..n).map(|j| (pi, j)).collect());
-        scan_line((0..pj).rev().map(|j| (pi, j)).collect());
-    }
-    next_place
-}
-
-fn main() {
-    use std::io::{self, BufRead, Write};
-    let start_time = std::time::Instant::now();
-    // Read initial input manually
-    let stdin = io::stdin();
-    let mut lines = stdin.lock().lines();
-
-    // Read N, ti, tj
-    let first_line = lines.next().unwrap().unwrap();
-    let mut parts = first_line.trim().split_whitespace();
-    let n: usize = parts.next().unwrap().parse().unwrap();
-    let ti: usize = parts.next().unwrap().parse().unwrap();
-    let tj: usize = parts.next().unwrap().parse().unwrap();
-
-    // Read forest grid
-    let mut bss: Vec<Vec<char>> = Vec::new();
-    let mut already_placed = HashSet::new();
-    for i in 0..n {
-        let line = lines.next().unwrap().unwrap();
-        let row: Vec<char> = line.trim().chars().collect();
-        for (j, c) in row.clone().iter().enumerate() {
-            if *c == 'T' {
-                already_placed.insert((i, j));
-            }
-        }
-        bss.push(row);
-    }
-
-    let mut turn = 0;
-    let mut will_place = HashSet::new();
-    let mut empty_arround_flower = HashSet::new();
-    let mut before_place = None;
-    let mut confirmed: HashSet<(usize, usize)> = HashSet::new();
-    loop {
-        let line = lines.next().unwrap().unwrap();
-        let mut parts = line.trim().split_whitespace();
-        let pi: usize = parts.next().unwrap().parse().unwrap();
-        let pj: usize = parts.next().unwrap().parse().unwrap();
-
-        let line = lines.next().unwrap().unwrap();
-        let mut parts = line.trim().split_whitespace();
-        let num_confirmed: usize = parts.next().unwrap().parse().unwrap();
-
-        for _ in 0..num_confirmed {
-            let x: usize = parts.next().unwrap().parse().unwrap();
-            let y: usize = parts.next().unwrap().parse().unwrap();
-            confirmed.insert((x, y));
-        }
-
-        // Check if adventurer reached the flower
-        if pi == ti && pj == tj {
-            break;
-        }
-        if turn == 0 {
-            will_place = make_will_place(start_time, &bss, &confirmed, pi, pj, ti, tj);
-            empty_arround_flower =
-                make_empty_arround_flower(n, &confirmed, &already_placed, &will_place, (ti, tj));
-            eprintln!("empty_arround_flower: {:?}", empty_arround_flower);
-        }
-
-        let next_place = if start_time.elapsed().as_millis() < 1900 {
-            select_next_place2(
-                n,
-                &confirmed,
-                (pi, pj),
-                (ti, tj),
-                &mut will_place,
-                &already_placed,
-                before_place,
-                &mut empty_arround_flower,
-            )
-        } else {
-            Vec::new()
-        };
-
-        print!("{}", next_place.len());
-        for (i, j) in next_place {
-            already_placed.insert((i, j));
-            print!(" {} {}", i, j);
-        }
-        println!();
-        before_place = Some((pi, pj));
-        turn += 1;
-        io::stdout().flush().unwrap();
-    }
 }
 
 pub struct Sim {
@@ -838,6 +628,91 @@ fn simulate(
             return 0; // Cannot continue
         }
         steps += 1;
+    }
+}
+
+fn main() {
+    use std::io::{self, BufRead, Write};
+    let start_time = std::time::Instant::now();
+    // Read initial input manually
+    let stdin = io::stdin();
+    let mut lines = stdin.lock().lines();
+
+    // Read N, ti, tj
+    let first_line = lines.next().unwrap().unwrap();
+    let mut parts = first_line.trim().split_whitespace();
+    let n: usize = parts.next().unwrap().parse().unwrap();
+    let ti: usize = parts.next().unwrap().parse().unwrap();
+    let tj: usize = parts.next().unwrap().parse().unwrap();
+
+    // Read forest grid
+    let mut bss: Vec<Vec<char>> = Vec::new();
+    let mut already_placed = HashSet::new();
+    for i in 0..n {
+        let line = lines.next().unwrap().unwrap();
+        let row: Vec<char> = line.trim().chars().collect();
+        for (j, c) in row.clone().iter().enumerate() {
+            if *c == 'T' {
+                already_placed.insert((i, j));
+            }
+        }
+        bss.push(row);
+    }
+
+    let mut turn = 0;
+    let mut will_place = HashSet::new();
+    let mut empty_arround_flower = HashSet::new();
+    let mut before_place = None;
+    let mut confirmed: HashSet<(usize, usize)> = HashSet::new();
+    loop {
+        let line = lines.next().unwrap().unwrap();
+        let mut parts = line.trim().split_whitespace();
+        let pi: usize = parts.next().unwrap().parse().unwrap();
+        let pj: usize = parts.next().unwrap().parse().unwrap();
+
+        let line = lines.next().unwrap().unwrap();
+        let mut parts = line.trim().split_whitespace();
+        let num_confirmed: usize = parts.next().unwrap().parse().unwrap();
+
+        for _ in 0..num_confirmed {
+            let x: usize = parts.next().unwrap().parse().unwrap();
+            let y: usize = parts.next().unwrap().parse().unwrap();
+            confirmed.insert((x, y));
+        }
+
+        // Check if adventurer reached the flower
+        if pi == ti && pj == tj {
+            break;
+        }
+        if turn == 0 {
+            will_place = solve(start_time, &bss, &confirmed, pi, pj, ti, tj);
+        }
+
+        let elapsed_ms = start_time.elapsed().as_millis();
+        let next_place = if elapsed_ms < 1900 {
+            select_next_place(
+                n,
+                &confirmed,
+                (pi, pj),
+                (ti, tj),
+                &mut will_place,
+                &already_placed,
+                before_place,
+                &empty_arround_flower,
+            )
+        } else {
+            Vec::new()
+        };
+
+        print!("{}", next_place.len());
+        for (i, j) in next_place {
+            already_placed.insert((i, j));
+            print!(" {} {}", i, j);
+        }
+        println!();
+        before_place = Some((pi, pj));
+        turn += 1;
+        io::stdout().flush().unwrap();
     }
 }
 
