@@ -78,7 +78,10 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         .treant { background-color: #228B22; color: white; cursor: pointer; }
         .editor-mode .cell:not(.tree):not(.flower) { cursor: pointer; }
         .editor-mode .cell:not(.tree):not(.flower):hover { background-color: #B0E0E6 !important; }
+        .test-mode .cell:not(.tree):not(.flower) { cursor: pointer; }
+        .test-mode .cell:not(.tree):not(.flower):hover { background-color: #FFE4B5 !important; }
         .placed-tree { background-color: #228B22; color: white; }
+        .test-tree { background-color: #FF6347; color: white; }
         .output-display { 
             margin-top: 20px; 
             padding: 15px; 
@@ -113,6 +116,15 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
     <div class="controls">
         <button onclick="toggleEditorMode()" id="editorModeBtn">Switch to Editor Mode</button>
         <button onclick="clearPlacedTrees()" id="clearTreesBtn" style="display: none;">Clear All Trees</button>
+        <button onclick="startTestMode()" id="testModeBtn">Start Test Mode</button>
+        <button onclick="runTestSimulation()" id="runTestBtn" style="display: none;">Run Test Simulation</button>
+        <button onclick="exitTestMode()" id="exitTestBtn" style="display: none;">Exit Test Mode</button>
+    </div>
+    <div class="controls" id="testInputControls" style="display: none;">
+        <label for="treeInput">Tree placements (one line per turn, format: "m x₀ y₀ x₁ y₁ ..."):</label><br>
+        <textarea id="treeInput" placeholder="e.g., 3 1 2 3 4 5 6&#10;1 7 8&#10;0" style="width: 400px; height: 100px; margin: 5px;"></textarea><br>
+        <button onclick="parseAndPlaceTrees()">Parse & Place Trees</button>
+        <button onclick="clearTestTrees()">Clear All</button>
     </div>
     "#,
     );
@@ -163,7 +175,9 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         let currentStep = 0;
         let animationInterval = null;
         let editorMode = false;
+        let testMode = false;
         let placedTrees = [];
+        let testTrees = [];
         
         function initGrid() {{
             const grid = document.getElementById('grid');
@@ -688,6 +702,8 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
         }}
         
         function toggleEditorMode() {{
+            if (testMode) return; // Cannot switch to editor mode while in test mode
+            
             editorMode = !editorMode;
             const grid = document.getElementById('grid');
             const editorBtn = document.getElementById('editorModeBtn');
@@ -806,6 +822,262 @@ fn generate_interactive_vis(input: &Input, out: &Output) -> String {
                 }});
                 outputContent.textContent = output;
             }}
+        }}
+        
+        function startTestMode() {{
+            if (editorMode) return; // Cannot start test mode while in editor mode
+            
+            testMode = true;
+            const grid = document.getElementById('grid');
+            const testBtn = document.getElementById('testModeBtn');
+            const runTestBtn = document.getElementById('runTestBtn');
+            const exitTestBtn = document.getElementById('exitTestBtn');
+            const editorBtn = document.getElementById('editorModeBtn');
+            const info = document.getElementById('info');
+            const testInputControls = document.getElementById('testInputControls');
+            
+            grid.classList.add('test-mode');
+            testBtn.style.display = 'none';
+            runTestBtn.style.display = 'inline-block';
+            exitTestBtn.style.display = 'inline-block';
+            editorBtn.style.display = 'none';
+            info.style.display = 'none';
+            testInputControls.style.display = 'block';
+            
+            // Reset grid to initial state
+            resetGridToInitial();
+            
+            // Add click handlers to empty cells for placing test trees
+            for (let i = 0; i < input.N; i++) {{
+                for (let j = 0; j < input.N; j++) {{
+                    const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+                    if (!cell.classList.contains('tree') && !cell.classList.contains('flower')) {{
+                        cell.onclick = function(e) {{
+                            e.preventDefault();
+                            e.stopPropagation();
+                            placeTestTree(i, j);
+                        }};
+                    }}
+                }}
+            }}
+        }}
+        
+        function exitTestMode() {{
+            testMode = false;
+            const grid = document.getElementById('grid');
+            const testBtn = document.getElementById('testModeBtn');
+            const runTestBtn = document.getElementById('runTestBtn');
+            const exitTestBtn = document.getElementById('exitTestBtn');
+            const editorBtn = document.getElementById('editorModeBtn');
+            const info = document.getElementById('info');
+            const testInputControls = document.getElementById('testInputControls');
+            
+            grid.classList.remove('test-mode');
+            testBtn.style.display = 'inline-block';
+            runTestBtn.style.display = 'none';
+            exitTestBtn.style.display = 'none';
+            editorBtn.style.display = 'inline-block';
+            info.style.display = 'block';
+            testInputControls.style.display = 'none';
+            
+            // Clear test trees
+            testTrees.forEach(([i, j]) => {{
+                const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+                cell.classList.remove('test-tree');
+                cell.textContent = '.';
+            }});
+            testTrees = [];
+            
+            // Remove click handlers
+            for (let i = 0; i < input.N; i++) {{
+                for (let j = 0; j < input.N; j++) {{
+                    const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+                    cell.onclick = null;
+                }}
+            }}
+            
+            // Reset to visualization mode
+            if (simulationSteps && simulationSteps.length > 0) {{
+                updateStep(currentStep);
+            }}
+        }}
+        
+        function placeTestTree(i, j) {{
+            // Check if position is already occupied
+            if (input.b[i][j] === 'T' || (i === input.t[0] && j === input.t[1])) {{
+                return; // Cannot place on existing tree or flower
+            }}
+            
+            // Check if already placed
+            if (testTrees.some(([pi, pj]) => pi === i && pj === j)) {{
+                return;
+            }}
+            
+            testTrees.push([i, j]);
+            
+            const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+            cell.classList.add('test-tree');
+            cell.textContent = 'T';
+            cell.onclick = function(e) {{
+                e.preventDefault();
+                e.stopPropagation();
+                removeTestTree(i, j);
+            }};
+        }}
+        
+        function removeTestTree(i, j) {{
+            testTrees = testTrees.filter(([pi, pj]) => !(pi === i && pj === j));
+            
+            const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+            cell.classList.remove('test-tree');
+            cell.textContent = '.';
+            cell.onclick = function(e) {{
+                e.preventDefault();
+                e.stopPropagation();
+                placeTestTree(i, j);
+            }};
+        }}
+        
+        function resetGridToInitial() {{
+            for (let i = 0; i < input.N; i++) {{
+                for (let j = 0; j < input.N; j++) {{
+                    const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+                    cell.className = 'cell';
+                    cell.onclick = null;
+                    
+                    if (input.b[i][j] === 'T') {{
+                        cell.classList.add('tree');
+                        cell.textContent = 'T';
+                    }} else if (i === input.t[0] && j === input.t[1]) {{
+                        cell.classList.add('flower');
+                        cell.textContent = 'F';
+                    }} else {{
+                        cell.textContent = '.';
+                    }}
+                }}
+            }}
+        }}
+        
+        function runTestSimulation() {{
+            if (testTrees.length === 0) {{
+                alert('Please place at least one test tree before running simulation.');
+                return;
+            }}
+            
+            // Create forest with test trees
+            const testForest = input.b.map(row => [...row]);
+            testTrees.forEach(([i, j]) => {{
+                testForest[i][j] = 'T';
+            }});
+            
+            // Run simulation
+            const testSteps = runCompleteSimulation(testForest, input.t, input.N);
+            
+            if (testSteps && testSteps.length > 0) {{
+                // Update global simulation steps for visualization
+                window.simulationSteps = testSteps;
+                simulationSteps = testSteps;
+                
+                // Update slider
+                const slider = document.getElementById('stepSlider');
+                const sliderValue = document.getElementById('stepSliderValue');
+                slider.max = testSteps.length - 1;
+                slider.value = 0;
+                sliderValue.textContent = '0';
+                
+                // Show visualization controls
+                const info = document.getElementById('info');
+                info.style.display = 'block';
+                
+                // Update to first step
+                currentStep = 0;
+                updateStep(0);
+                
+                alert(`Test simulation completed! Generated ${{testSteps.length}} steps.`);
+            }} else {{
+                alert('Failed to generate test simulation. Please check the console for errors.');
+            }}
+        }}
+        
+        function parseAndPlaceTrees() {{
+            const inputText = document.getElementById('treeInput').value.trim();
+            if (!inputText) {{
+                alert('Please enter tree placements.');
+                return;
+            }}
+            
+            // Clear existing test trees
+            clearTestTrees();
+            
+            // Parse multiple lines (each line is one turn)
+            const lines = inputText.split('\n');
+            let totalTrees = 0;
+            
+            for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {{
+                const line = lines[lineIdx].trim();
+                if (!line) continue;
+                const parts = line.split(/\s+/);
+                if (parts.length < 1) {{
+                    alert(`Invalid format at line ${{lineIdx + 1}}. Expected: "m x₀ y₀ x₁ y₁ ..."`);
+                    return;
+                }}
+                
+                const m = parseInt(parts[0]);
+                if (isNaN(m) || m < 0) {{
+                    alert(`Invalid number of trees at line ${{lineIdx + 1}}: ${{m}}`);
+                    return;
+                }}
+                
+                if (parts.length !== 1 + m * 2) {{
+                    alert(`Line ${{lineIdx + 1}}: Expected ${{1 + m * 2}} numbers (m + ${{m}} pairs), but got ${{parts.length}}.`);
+                    return;
+                }}
+                
+                // Parse and place trees for this turn
+                for (let i = 0; i < m; i++) {{
+                    const x = parseInt(parts[1 + i * 2]);
+                    const y = parseInt(parts[2 + i * 2]);
+                    
+                    if (isNaN(x) || isNaN(y)) {{
+                        alert(`Invalid coordinates at line ${{lineIdx + 1}}, position ${{i + 1}}: ${{x}}, ${{y}}`);
+                        return;
+                    }}
+                    
+                    if (x < 0 || x >= input.N || y < 0 || y >= input.N) {{
+                        alert(`Coordinates out of bounds at line ${{lineIdx + 1}}, position ${{i + 1}}: ${{x}}, ${{y}} (grid size: ${{input.N}}x${{input.N}})`);
+                        return;
+                    }}
+                    
+                    if (input.b[x][y] === 'T' || (x === input.t[0] && y === input.t[1])) {{
+                        alert(`Cannot place tree at line ${{lineIdx + 1}}, position ${{i + 1}}: (${{x}}, ${{y}}) - position is occupied.`);
+                        return;
+                    }}
+                    
+                    // Check if already placed in this session
+                    if (testTrees.some(([px, py]) => px === x && py === y)) {{
+                        alert(`Tree already placed at line ${{lineIdx + 1}}, position ${{i + 1}}: (${{x}}, ${{y}})`);
+                        return;
+                    }}
+                    
+                    placeTestTree(x, y);
+                    totalTrees++;
+                }}
+            }}
+            
+        }}
+        
+        function clearTestTrees() {{
+            testTrees.forEach(([i, j]) => {{
+                const cell = document.getElementById(`cell-${{i}}-${{j}}`);
+                cell.classList.remove('test-tree');
+                cell.textContent = '.';
+                cell.onclick = function(e) {{
+                    e.preventDefault();
+                    e.stopPropagation();
+                    placeTestTree(i, j);
+                }};
+            }});
+            testTrees = [];
         }}
         
         // Initialize slider

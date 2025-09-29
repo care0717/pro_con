@@ -63,10 +63,9 @@ seq -f "%04g" 0 300 | xargs -n 1 -P $JOBS -I {} bash -c 'test_case "$@"' _ {}
 total_score=0
 test_count=0
 failed_count=0
-min_score=999999999999999999
 max_score=0
-min_case=""
 max_case=""
+all_scores=()
 
 for result_file in result_*.txt; do
     if [ -f "$result_file" ]; then
@@ -76,11 +75,10 @@ for result_file in result_*.txt; do
             total_score=$((total_score + score))
             test_count=$((test_count + 1))
             
-            # Update min and max scores
-            if [ "$score" -lt "$min_score" ]; then
-                min_score=$score
-                min_case=$case_num
-            fi
+            # Store all scores for sorting
+            all_scores+=("$case_num:$score")
+            
+            # Update max score
             if [ "$score" -gt "$max_score" ]; then
                 max_score=$score
                 max_case=$case_num
@@ -101,10 +99,18 @@ echo "=== BENCHMARK RESULTS ==="
 if [ $test_count -gt 0 ]; then
     average_score=$((total_score / test_count))
     echo "Average score: $average_score"
-    echo "Minimum score: $min_score (case: $min_case)"
     echo "Maximum score: $max_score (case: $max_case)"
     echo "Total tests: $test_count"
     echo "Failed tests: $failed_count"
+    
+    # Sort scores and show bottom 10
+    if [ ${#all_scores[@]} -gt 0 ]; then
+        echo ""
+        echo "=== BOTTOM 10 CASES ==="
+        printf '%s\n' "${all_scores[@]}" | sort -t: -k2 -n | head -10 | while IFS=':' read -r case_num score; do
+            echo "Case $case_num: Score $score"
+        done
+    fi
 else
     echo "No successful tests completed"
 fi
