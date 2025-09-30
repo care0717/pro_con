@@ -6,23 +6,12 @@ jobs:
     name: all
     runs-on: ubuntu-latest
     steps:
-      # GOPATHなどのセットアップ
-      - name: set up
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.13
-        id: go
-      # repositoryの中身にアクセスするためのチェックアウト
       - name: checkout
-        uses: actions/checkout@v2
-      # cache store
-      - name: cache
-        uses: actions/cache@v2
+        uses: actions/checkout@v5
+      - name: set up
+        uses: actions/setup-go@v5
         with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          go-versio-file: ./go.mod
       - name: template-test
         run: go test ./library/template/... -v
       - name: cmd-test
