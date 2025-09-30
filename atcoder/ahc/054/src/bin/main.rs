@@ -18,6 +18,175 @@ const ARROUND: [(usize, usize); 8] = [
     (!0, 1),
     (1, 1),
 ];
+fn rotate_offset(di: i64, dj: i64, degrees: i64) -> (i64, i64) {
+    match degrees % 360 {
+        0 => (di, dj),
+        1 => (-dj, di),  // 時計回り90度
+        2 => (-di, -dj), // 180度
+        3 => (dj, -di),  // 反時計回り90度
+        _ => {
+            panic!("Warning: Only 90-degree multiples are supported. Using 0 degrees.");
+        }
+    }
+}
+
+fn rotate_offsets(offsets: &Vec<(i64, i64)>, degrees: i64) -> Vec<(i64, i64)> {
+    let mut rotated_offsets = Vec::new();
+    for &(di, dj) in offsets {
+        // 差分を回転
+        let (rotated_di, rotated_dj) = rotate_offset(di, dj, degrees);
+        rotated_offsets.push((rotated_di, rotated_dj));
+    }
+    rotated_offsets
+}
+
+fn put_jar(
+    n: usize,
+    already_placed: &HashSet<(usize, usize)>,
+    ti: usize,
+    tj: usize,
+) -> HashSet<(usize, usize)> {
+    let first_place: Vec<(i64, i64)> = vec![(0, -1), (0, 1), (-1, 0), (2, 0)];
+    let half_secound_place: Vec<(i64, i64)> = vec![
+        (-3, -1),
+        (-2, -2),
+        (-1, -3),
+        (0, -3),
+        (1, -3),
+        (2, -2),
+        (3, -2),
+        (4, -1),
+        (4, 0),
+    ];
+    let mut secound_place = half_secound_place.clone();
+    for (di, dj) in half_secound_place {
+        secound_place.push((di, -dj))
+    }
+    'looptop: for degrees in 0..4 {
+        let rotated_first_place = rotate_offsets(&first_place, degrees);
+        let rotated_secound_place = rotate_offsets(&secound_place, degrees);
+        let mut jar_placements = HashSet::new();
+        for (di, dj) in rotated_first_place {
+            let ni: i64 = ti as i64 + di;
+            let nj = tj as i64 + dj;
+            for (di, dj) in ARROUND {
+                let ni2 = ni as usize + di;
+                let nj2 = nj as usize + dj;
+                if already_placed.contains(&(ni2 as usize, nj2 as usize)) {
+                    break 'looptop;
+                }
+            }
+            if ni >= 0
+                && nj >= 0
+                && ni < n as i64
+                && nj < n as i64
+                && !already_placed.contains(&(ni as usize, nj as usize))
+            {
+                jar_placements.insert((ni as usize, nj as usize));
+            }
+        }
+        for (di, dj) in rotated_secound_place {
+            let ni = ti as i64 + di;
+            let nj = tj as i64 + dj;
+            if ni >= 0
+                && nj >= 0
+                && ni < n as i64
+                && nj < n as i64
+                && !already_placed.contains(&(ni as usize, nj as usize))
+            {
+                jar_placements.insert((ni as usize, nj as usize));
+            }
+        }
+        let mut tmp_already_placed = already_placed.clone();
+        tmp_already_placed.extend(jar_placements.clone());
+        if can_reach_goals(n, &tmp_already_placed, 0, n / 2, &vec![(ti, tj)]) {
+            return jar_placements;
+        }
+    }
+
+    HashSet::new()
+}
+
+fn can_reach_goal_with_route(
+    n: usize,
+    already_placed: &HashSet<(usize, usize)>,
+    p: (usize, usize),
+    goal: (usize, usize),
+) -> Vec<(usize, usize)> {
+    let (pi, pj) = p;
+    let (ti, tj) = goal;
+    let mut queue = VecDeque::new();
+    queue.push_back((pi, pj, Vec::new()));
+    let mut visited = HashSet::new();
+    visited.insert((pi, pj));
+    while !queue.is_empty() {
+        let (ni, nj, mut route) = queue.pop_front().unwrap();
+        visited.insert((ni, nj));
+        route.push((ni, nj));
+        if ni == ti && nj == tj {
+            return route;
+        }
+        for (di, dj) in DIJ {
+            let ni2 = ni + di;
+            let nj2 = nj + dj;
+            if ni2 < n && nj2 < n && !visited.contains(&(ni2, nj2)) {
+                queue.push_back((ni2, nj2, route.clone()));
+            }
+        }
+    }
+    Vec::new()
+}
+
+fn divide_forest(
+    n: usize,
+    already_placed: &HashSet<(usize, usize)>,
+    p: (usize, usize),
+    t: (usize, usize),
+) -> HashSet<(usize, usize)> {
+    let (pi, pj) = p;
+    let (ti, tj) = t;
+    let mut route = Vec::new();
+    let mut queue = VecDeque::new();
+    queue.push_back((n - 1, pj));
+    let mut visited = HashSet::new();
+    visited.insert((n - 1, pj));
+    while !queue.is_empty() {
+        let (ni, nj) = queue.pop_front().unwrap();
+        visited.insert((ni, nj));
+        if !already_placed.contains(&(ni, nj)) {
+            route = can_reach_goal_with_route(n, already_placed, p, (ni, nj));
+            if !route.is_empty() {
+                break;
+            }
+        }
+        for (di, dj) in DIJ {
+            let ni2 = ni + di;
+            let nj2 = nj + dj;
+            if ni2 < n && nj2 < n && !visited.contains(&(ni2, nj2)) {
+                queue.push_back((ni2, nj2));
+            }
+        }
+    }
+    let mut trent_placements = HashSet::new();
+    for (ni, nj) in route {
+        if nj < n && nj < n {
+            if !already_placed.contains(&(ni, nj - 1)) {
+                trent_placements.insert((ni, nj - 1));
+            }
+            if !already_placed.contains(&(ni, nj + 1)) {
+                trent_placements.insert((ni, nj + 1));
+            }
+        }
+    }
+    let mut uf = new_uf(n, &trent_placements);
+    for i in 0..n {
+        for j in 0..n {
+            if trent_placements.contains(&(i, j)) {}
+        }
+    }
+    trent_placements
+}
+
 // 上下左右に木があるかどうか
 fn exist_dij_tree(
     n: usize,
@@ -207,7 +376,7 @@ fn make_just_above_vertical_candidate2(
     candidate
 }
 
-fn vertical_treant(
+fn put_vertical_treant(
     n: usize,
     already_placed: &HashSet<(usize, usize)>,
     confirmed: &HashSet<(usize, usize)>,
@@ -671,18 +840,7 @@ fn new_uf(n: usize, treant_placements: &HashSet<(usize, usize)>) -> UnionFind {
     uf
 }
 
-fn solve(
-    start_time: std::time::Instant,
-    n: usize,
-    already_placed: &HashSet<(usize, usize)>,
-    confirmed: &HashSet<(usize, usize)>,
-    pi: usize,
-    pj: usize,
-    ti: usize,
-    tj: usize,
-    empty_arround_flower: &HashSet<(usize, usize)>,
-) -> (HashSet<(usize, usize)>, bool) {
-    // Generate q: all cells except entrance in random order
+fn init_qs(n: usize) -> Vec<Vec<(usize, usize)>> {
     use rand::prelude::*;
     let mut rng = thread_rng();
     let mut q = Vec::new();
@@ -699,7 +857,32 @@ fn solve(
         q.shuffle(&mut rng);
         qs.push(q.clone());
     }
+    qs
+}
 
+fn solve(
+    start_time: std::time::Instant,
+    n: usize,
+    already_placed: &HashSet<(usize, usize)>,
+    confirmed: &HashSet<(usize, usize)>,
+    pi: usize,
+    pj: usize,
+    ti: usize,
+    tj: usize,
+    empty_arround_flower: &HashSet<(usize, usize)>,
+) -> (HashSet<(usize, usize)>, bool) {
+    // Generate q: all cells except entrance in random order
+
+    let mut tmp_already_placements = already_placed.clone();
+    let jar_placements = put_jar(n, &tmp_already_placements, ti, tj);
+    tmp_already_placements.extend(jar_placements.clone());
+
+    let vertical_treant_placements = if jar_placements.is_empty() {
+        put_vertical_treant(n, &already_placed, &confirmed, (ti, tj))
+    } else {
+        HashSet::new()
+    };
+    tmp_already_placements.extend(vertical_treant_placements.clone());
     let surround_candidates: Vec<Vec<(i64, i64)>> = if tj >= n / 2 {
         vec![
             vec![(1, 0), (0, -1), (-1, 0), (-1, 1), (0, 2)], // 横右下
@@ -723,23 +906,31 @@ fn solve(
             vec![(1, 0), (0, -1), (-1, 0), (1, 1), (0, 2)],   // 横右上
         ]
     };
-    let vertical_treant_placements = vertical_treant(n, &already_placed, &confirmed, (ti, tj));
-    let mut tmp_already_placements = already_placed.clone();
-    tmp_already_placements.extend(vertical_treant_placements.clone());
-    let can_reach_surround_placements = surround_flower(
-        n,
-        &tmp_already_placements,
-        &confirmed,
-        (ti, tj),
-        &vec![(ti, tj)],
-        &surround_candidates,
-    );
+    let can_reach_surround_placements =
+        if jar_placements.is_empty() && vertical_treant_placements.is_empty() {
+            surround_flower(
+                n,
+                &tmp_already_placements,
+                &confirmed,
+                (ti, tj),
+                &vec![(ti, tj)],
+                &surround_candidates,
+            )
+        } else {
+            vec![]
+        };
     let surround_placements = if !can_reach_surround_placements.is_empty() {
         can_reach_surround_placements[0].clone()
     } else {
         HashSet::new()
     };
     tmp_already_placements.extend(surround_placements.clone());
+    eprintln!(
+        "vertical_treant_placements: {:?}",
+        vertical_treant_placements
+    );
+    eprintln!("jar_placements: {:?}", jar_placements);
+    eprintln!("surround_placements: {:?}", surround_placements);
     let mut best_placements = HashSet::new();
     let mut best_score = 0;
     let mut tmp_confirmed = confirmed.clone();
@@ -750,6 +941,7 @@ fn solve(
             tmp_confirmed.insert((ti + i, tj - 1));
         }
     }
+    let qs: Vec<Vec<(usize, usize)>> = init_qs(n);
     for i in 0..3 {
         let direction: usize = if tj >= n / 2 { 1 } else { !0 };
         let mut treant_placements = put_all_diagonal(
@@ -765,8 +957,7 @@ fn solve(
         all_placements.extend(treant_placements.clone());
         let mut uf: UnionFind = new_uf(n, &all_placements);
         for (i, j) in treant_placements.clone() {
-            if vertical_treant_placements.contains(&(i, j)) || surround_placements.contains(&(i, j))
-            {
+            if tmp_already_placements.contains(&(i, j)) {
                 continue;
             }
             if (i == 0 || i == n - 1) && (j == 0 || j == n - 1) {
@@ -782,28 +973,8 @@ fn solve(
                     treant_placements.remove(&(i, j));
                 }
             }
-            if (i > 0
-                && i < n - 1
-                && !uf.is_same((i + 1) * n + j, (i - 1) * n + j)
-                && size_large_or_start_position(
-                    n,
-                    &mut uf,
-                    (i + 1, j),
-                    (i - 1, j),
-                    (pi, pj),
-                    (ti, tj),
-                ))
-                || (j > 0
-                    && j < n - 1
-                    && !uf.is_same(i * n + j + 1, i * n + j - 1)
-                    && size_large_or_start_position(
-                        n,
-                        &mut uf,
-                        (i, j + 1),
-                        (i, j - 1),
-                        (pi, pj),
-                        (ti, tj),
-                    ))
+            if (i > 0 && i < n - 1 && !uf.is_same((i + 1) * n + j, (i - 1) * n + j))
+                || (j > 0 && j < n - 1 && !uf.is_same(i * n + j + 1, i * n + j - 1))
             {
                 treant_placements.remove(&(i, j));
                 let mut tmp = tmp_already_placements.clone();
@@ -832,9 +1003,7 @@ fn solve(
             best_placements = treant_placements;
         }
     }
-    best_placements.extend(vertical_treant_placements);
-    best_placements.extend(surround_placements.clone());
-
+    best_placements.extend(tmp_already_placements.clone());
     (best_placements, surround_placements.len() > 0)
 }
 
